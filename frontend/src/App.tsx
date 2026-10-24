@@ -5,8 +5,8 @@ import TripForm from './form/TripForm'
 import FailedNote from './plan/FailedNote'
 import { fieldErrors } from './plan/messages'
 import PlanningView from './plan/PlanningView'
-import ResultStub from './plan/ResultStub'
 import { usePlan } from './plan/usePlan'
+import Results from './results/Results'
 import Panel from './ui/Panel'
 
 // MapLibre is large: it loads after the form is on screen, and the form never waits for it.
@@ -40,7 +40,7 @@ export default function App() {
         {(state.status === 'planning' || state.status === 'waiting') && (
           <PlanningView {...state} onCancel={cancel} onRetryNow={retry} />
         )}
-        {plan && selected && <ResultStub plan={plan} selected={selected} onSelect={select} />}
+        {plan && selected && <Results plan={plan} selected={selected} onSelect={select} />}
         {/* kept mounted while planning, so going back finds the form as it was */}
         <Box sx={{ display: editing ? 'block' : 'none' }}>
           <TripForm onSubmit={start} serverErrors={state.status === 'failed' ? fieldErrors(state.error) : undefined} />
