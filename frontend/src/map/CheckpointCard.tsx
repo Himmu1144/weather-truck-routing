@@ -2,17 +2,19 @@ import { Box, Typography } from '@mui/material'
 import type { Checkpoint } from '../api/types'
 import { at } from '../lib/format'
 import { ink, RISK } from '../theme'
+import type { CardArea } from './geometry'
 import MapCard from './MapCard'
 
 interface Props {
   checkpoint: Checkpoint
   x: number
   y: number
+  area?: CardArea
   onClose?: () => void // set when the card is pinned (clicked or tapped)
 }
 
 /** One checkpoint, read off the map: when the truck is there, the weather then, and what it means. */
-export default function CheckpointCard({ checkpoint: c, x, y, onClose }: Props) {
+export default function CheckpointCard({ checkpoint: c, x, y, area, onClose }: Props) {
   const [level, ...cause] = c.reason.split(': ')
   // the reading that set the level is in bold
   const rows: [string, string, boolean][] = [
@@ -22,7 +24,7 @@ export default function CheckpointCard({ checkpoint: c, x, y, onClose }: Props) 
     ['Snow', `${c.snow_in_hr.toFixed(1)} in/hr`, c.causes.includes('snow')],
   ]
   return (
-    <MapCard x={x} y={y} label={`Checkpoint at mile ${Math.round(c.mile)}`} onClose={onClose}>
+    <MapCard x={x} y={y} area={area} label={`Checkpoint at mile ${Math.round(c.mile)}`} onClose={onClose}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.9 }}>
         <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: RISK[c.level], boxShadow: c.level === 'low' ? 'inset 0 0 0 1px rgba(0,0,0,.15)' : 'none' }} />
         <Typography sx={{ fontWeight: 600, fontSize: 13 }}>{level}</Typography>

@@ -66,3 +66,13 @@ export function bounds(plan: Plan): [Position, Position] {
   const lons = plan.routes.flatMap(r => r.line.map(p => p[0])), lats = plan.routes.flatMap(r => r.line.map(p => p[1]))
   return [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]]
 }
+
+export const CARD_WIDTH = 236
+export interface CardArea { width: number; bottom: number } // the visible map: its width, and where the slider or sheet begins
+
+/** Where a map card goes for the point (x, y): above it, or below when there is more room there, and
+ *  slid sideways so it stays on screen. Returns the card's centre x and its side. */
+export function cardPlace(x: number, y: number, area: CardArea): { left: number; below: boolean } {
+  const half = CARD_WIDTH / 2 + 8
+  return { left: Math.min(Math.max(x, half), Math.max(half, area.width - half)), below: area.bottom - y > y }
+}

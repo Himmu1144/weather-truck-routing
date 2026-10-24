@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Plan, Route } from '../api/types'
-import { bounds, checkpointFeatures, labelMile, pointAt, routeFeatures, slice } from './geometry'
+import { bounds, cardPlace, checkpointFeatures, labelMile, pointAt, routeFeatures, slice } from './geometry'
 
 // A straight road east along 40°N: one vertex every 10 miles, 100 miles long.
 function road(id: Route['id'], lat = 40, bend?: (mile: number) => number): Route {
@@ -47,5 +47,21 @@ describe('map geometry', () => {
     const a = road('A'), b = road('B', 40, mile => (mile <= 50 ? 40 : 40 + (mile - 50) / 50))
     const best = labelMile(b, [a])
     expect(Math.abs(labelMile(b, [a], [best]) - best)).toBeGreaterThanOrEqual(6)
+  })
+})
+
+describe('cardPlace', () => {
+  const area = { width: 390, bottom: 340 }
+  it('opens on the side with more room, so it stays clear of the slider', () => {
+    expect(cardPlace(200, 100, area).below).toBe(true)
+    expect(cardPlace(200, 255, area).below).toBe(false)
+    // near the top of a short phone map, but with even less room below: still above
+    expect(cardPlace(200, 200, area).below).toBe(false)
+    expect(cardPlace(200, 200, { width: 1440, bottom: 900 }).below).toBe(true)
+  })
+  it('slides sideways to stay on screen', () => {
+    expect(cardPlace(20, 200, area).left).toBe(126)
+    expect(cardPlace(380, 200, area).left).toBe(264)
+    expect(cardPlace(200, 200, area).left).toBe(200)
   })
 })

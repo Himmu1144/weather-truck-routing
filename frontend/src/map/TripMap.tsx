@@ -6,7 +6,7 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import type { Plan, Route } from '../api/types'
 import { duration } from '../lib/format'
 import { ink, RISK } from '../theme'
-import { bounds, checkpointFeatures, labelMile, pointAt, routeFeatures } from './geometry'
+import { bounds, checkpointFeatures, labelMile, pointAt, routeFeatures, type CardArea } from './geometry'
 import './map.css'
 import { heatLayer, type HeatLayer, type HeatView } from '../heat/layer'
 import type { HeatState } from '../heat/useHeatWeather'
@@ -39,11 +39,12 @@ interface Props {
   hour: number // hours after departure shown by the heatmap
   view: HeatView
   truck: { at: [number, number]; note: string | null } | null // where the truck is at that hour, and why it stands still
-  padding: PaddingOptions // the part of the map the panel covers
+  padding: PaddingOptions // the part of the map the panel (and on a phone, the slider) covers
+  margin: PaddingOptions // room kept around the routes when they are framed
 }
 
 // The open card: which checkpoint, whether it stays open, and where on screen (kept up to date as the map moves).
-type Card = { kind: 'checkpoint' | 'rest'; route: Route['id']; index: number; pinned: boolean; lon: number; lat: number; x: number; y: number }
+type Card = { kind: 'checkpoint' | 'rest'; route: Route['id']; index: number; pinned: boolean; lon: number; lat: number; x: number; y: number; area: CardArea }
 
 function webgl(): boolean {
   try {
@@ -55,7 +56,7 @@ function webgl(): boolean {
 }
 
 /** The map. The plan never depends on it: without WebGL the panel still shows everything. */
-export default function TripMap({ plan, selected, onSelect, focus, heat, hour, view, truck, padding }: Props) {
+export default function TripMap({ plan, selected, onSelect, focus, heat, hour, view, truck, padding, margin }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const map = useRef<MapLibre | null>(null)
   const markers = useRef<Marker[]>([])
@@ -73,7 +74,8 @@ export default function TripMap({ plan, selected, onSelect, focus, heat, hour, v
     const point = kind === 'checkpoint' ? r?.checkpoints[index] : r?.rest_stops[index]
     if (!m || !point || !selected) return
     const { x, y } = m.project([point.lon, point.lat])
-    setCard(open => (open?.pinned && !pinned && open.route === selected ? open : { kind, route: selected, index, pinned, lon: point.lon, lat: point.lat, x, y }))
+    const area = { width: m.getContainer().clientWidth, bottom: m.getContainer().clientHeight - (m.getPadding().bottom ?? 0) }
+    setCard(open => (open?.pinned && !pinned && open.route === selected ? open : { kind, route: selected, index, pinned, lon: point.lon, lat: point.lat, x, y, area }))
   })
   const hideCard = useEffectEvent(() => setCard(c => (c?.pinned ? c : null)))
 
@@ -82,7 +84,11 @@ export default function TripMap({ plan, selected, onSelect, focus, heat, hour, v
     const m = new MapLibre({ container: box.current, style: STYLE, ...US, attributionControl: { compact: true } })
     m.addControl(new NavigationControl({ showCompass: false }), 'bottom-right')
     const slow = window.setTimeout(() => setBasemap(b => (b === 'loading' ? 'slow' : b)), SLOW_AFTER_MS)
-    m.once('load', () => { clearTimeout(slow); setBasemap('ready') })
+    m.once('load', () => {
+      clearTimeout(slow); setBasemap('ready')
+      // MapLibre shows the credits open until the first drag; closed to the (i), they never cover the slider card
+      m.getContainer().querySelector('.maplibregl-compact-show')?.classList.remove('maplibregl-compact-show')
+    })
     // 'style.load' comes as soon as the style is read; 'load' also waits for icons and tiles,
     // and a slow basemap file must never keep the routes off the map.
     m.once('style.load', () => {
@@ -145,10 +151,9 @@ export default function TripMap({ plan, selected, onSelect, focus, heat, hour, v
     ;(m.getSource('routes') as GeoJSONSource).setData(plan ? routeFeatures(plan) : EMPTY)
     // The panel's part of the map is the map's own padding; fitBounds adds only a margin around the routes.
     m.setPadding(padding)
-    // bottom: room for the slider card, so no route sits behind it
-    if (plan) m.fitBounds(new LngLatBounds(...bounds(plan)), { padding: { top: 70, bottom: 210, left: 60, right: 130 }, duration: 1200 })
+    if (plan) m.fitBounds(new LngLatBounds(...bounds(plan)), { padding: margin, duration: 1200 })
     else m.easeTo({ ...US, duration: 1000 })
-  }, [ready, plan, padding])
+  }, [ready, plan, padding, margin])
 
   // The heatmap: a new layer for each plan's weather, under the roads and place names so they stay readable.
   const grid = heat.status === 'ready' ? heat.grid : null, weather = heat.status === 'ready' ? heat.weather : null
@@ -211,7 +216,9 @@ export default function TripMap({ plan, selected, onSelect, focus, heat, hour, v
   useEffect(() => {
     const m = map.current, route = plan?.routes.find(r => r.id === selected)
     if (!ready || !m || !focus || !route) return
-    m.flyTo({ center: pointAt(route, focus.mile), zoom: Math.max(m.getZoom(), 7), duration: 1200 })
+    // On a short map (a phone, under the slider) the point goes low, so its card fits above it.
+    const { top = 0, bottom = 0 } = m.getPadding(), visible = m.getContainer().clientHeight - top - bottom
+    m.flyTo({ center: pointAt(route, focus.mile), zoom: Math.max(m.getZoom(), 7), offset: [0, visible < 500 ? visible * 0.25 : 0], duration: 1200 })
     const index = route.checkpoints.findIndex(c => Math.abs(c.mile - focus.mile) < 0.01)
     const rest = route.rest_stops.findIndex(s => Math.abs(s.mile - focus.mile) < 0.01)
     if (index >= 0) m.once('moveend', () => showCard('checkpoint', index, true))
@@ -237,8 +244,8 @@ export default function TripMap({ plan, selected, onSelect, focus, heat, hour, v
   return (
     <Box sx={{ position: 'absolute', inset: 0 }} data-basemap={basemap}>
       <Box ref={box} sx={{ width: 1, height: 1 }} />
-      {open && checkpoint && <CheckpointCard checkpoint={checkpoint} x={open.x} y={open.y} onClose={open.pinned ? () => setCard(null) : undefined} />}
-      {open && stop && <RestStopCard stop={stop} x={open.x} y={open.y} onClose={open.pinned ? () => setCard(null) : undefined} />}
+      {open && checkpoint && <CheckpointCard checkpoint={checkpoint} x={open.x} y={open.y} area={open.area} onClose={open.pinned ? () => setCard(null) : undefined} />}
+      {open && stop && <RestStopCard stop={stop} x={open.x} y={open.y} area={open.area} onClose={open.pinned ? () => setCard(null) : undefined} />}
       {basemap !== 'ready' && (
         <Typography role="status" variant="caption" sx={{
           position: 'absolute', top: 16, left: `calc(${padding.left}px + (100% - ${padding.left}px) / 2)`, transform: 'translateX(-50%)',

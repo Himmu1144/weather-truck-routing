@@ -31,7 +31,7 @@ export function restStop(stop: RestStop, on: { hover: (inside: boolean) => void;
 /** A callout that floats above its route, its pointer touching the line, so the line stays visible. */
 export function routeLabel(route: Route, duration: string, selected: boolean, onClick: () => void): HTMLElement {
   const el = element(`tw-label${selected ? ' on' : ''}`,
-    `<span class="tw-pill"><b>${route.id}</b>${duration}<span class="tw-miles"> · ${Math.round(route.distance_mi).toLocaleString('en-US')} mi</span></span><i></i>`)
+    `<span class="tw-pill"><b>${route.id}</b><span class="tw-time">${duration}</span><span class="tw-miles"> · ${Math.round(route.distance_mi).toLocaleString('en-US')} mi</span></span><i></i>`)
   el.setAttribute('role', 'button')
   el.setAttribute('aria-label', `Show route ${route.id}`)
   el.addEventListener('click', onClick)

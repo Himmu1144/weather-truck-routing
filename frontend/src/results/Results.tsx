@@ -1,4 +1,4 @@
-import { Box, ButtonBase, Switch, Typography } from '@mui/material'
+import { Box, Button, ButtonBase, Switch, Typography } from '@mui/material'
 import { memo } from 'react'
 import type { Level, Plan, Route } from '../api/types'
 import { at, duration, extra, localTime, miles } from '../lib/format'
@@ -16,6 +16,7 @@ interface Props {
   onRestBreaks?: (on: boolean) => void // plan the same trip again with legal rest breaks on or off
   twin?: Plan | null // the same trip planned the other way, for the comparison line
   updating?: boolean // the twin is being planned
+  onNewTrip?: () => void // on a phone the panel has no header, so the trip line carries the way back
 }
 
 const worst = (route: Route): Level | undefined =>
@@ -27,7 +28,7 @@ const exposureText = (route: Route) => {
 const routerTag = (route: Route) => (route.router === 'valhalla' ? 'Truck route' : 'Car roads')
 
 /** Memoised: the slider moves 60 times a second and the panel has no reason to redraw. */
-export default memo(function Results({ plan, selected, onSelect, onFocus, onRestBreaks, twin, updating }: Props) {
+export default memo(function Results({ plan, selected, onSelect, onFocus, onRestBreaks, twin, updating, onNewTrip }: Props) {
   const recommended = plan.routes.find(r => r.id === plan.recommendation.route_id)!
   const route = plan.routes.find(r => r.id === selected)!
   const fastest = Math.min(...plan.routes.map(r => r.travel_seconds))
@@ -37,10 +38,13 @@ export default memo(function Results({ plan, selected, onSelect, onFocus, onRest
 
   return (
     <Box>
-      <Box sx={{ pb: 2.5, mb: 2.75, borderBottom: `1px solid ${hairline}` }}>
-        <Typography sx={{ fontWeight: 600, fontSize: 15, letterSpacing: '-.01em' }}>
-          {trip.origin.label}<Box component="span" sx={{ color: ink[3], mx: 0.75 }}>→</Box>{trip.destination.label}
-        </Typography>
+      <Box sx={{ pb: { xs: 1.75, md: 2.5 }, mb: { xs: 2.25, md: 2.75 }, borderBottom: `1px solid ${hairline}` }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+          <Typography sx={{ fontWeight: 600, fontSize: 15, letterSpacing: '-.01em' }}>
+            {trip.origin.label}<Box component="span" sx={{ color: ink[3], mx: 0.75 }}>→</Box>{trip.destination.label}
+          </Typography>
+          {onNewTrip && <Button size="small" onClick={onNewTrip} sx={{ color: 'text.secondary', flex: 'none', mr: -1 }}>New trip</Button>}
+        </Box>
         <Typography variant="caption" component="p" sx={{ mt: 0.4, fontSize: 12.5 }}>
           Leaves {at(trip.departure, recommended.checkpoints[0].time_zone)} · {trip.load_lb.toLocaleString('en-US')} lb · weather every {trip.interval_mi} mi
         </Typography>
@@ -58,8 +62,8 @@ export default memo(function Results({ plan, selected, onSelect, onFocus, onRest
 
       {/* The answer first */}
       <Eyebrow>Recommended</Eyebrow>
-      <Typography variant="h2">Route {recommended.id}</Typography>
-      <Typography variant="body2" sx={{ color: ink[3], mt: 1, mb: 2.5 }}>
+      <Typography variant="h2" sx={{ fontSize: { xs: 38, md: 46 } }}>Route {recommended.id}</Typography>
+      <Typography variant="body2" sx={{ color: ink[3], mt: 1, mb: { xs: 1.75, md: 2.5 } }}>
         via {recommended.via} <Tag>{routerTag(recommended)}</Tag>
       </Typography>
       <Box sx={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr .8fr', gap: 1.5, mb: 2.25 }}>

@@ -19,3 +19,5 @@
 .tw-label:hover:not(.on) .tw-pill { color: #0b0b0d; }
 .maplibregl-ctrl-attrib { font-size: 10.5px; }
 @media (max-width: 760px) { .tw-miles { display: none; } }
+/* a phone: only the selected route's label says its time, so three labels don't pile up on a small map */
+@media (max-width: 899.95px) { .tw-label:not(.on) .tw-time { display: none; } .tw-label:not(.on) .tw-pill { padding-right: 4px; } }
