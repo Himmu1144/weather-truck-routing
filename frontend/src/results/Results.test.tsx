@@ -34,4 +34,11 @@ describe('Results', () => {
     expect(screen.getByText(/On Route A it raised 3 checkpoints\./)).toBeInTheDocument()
     expect(screen.getByText('Along route A')).toBeInTheDocument()
   })
+
+  it('a timeline row shows its mile on the map', async () => {
+    const onFocus = vi.fn()
+    render(<Results plan={plan} selected="B" onSelect={vi.fn()} onFocus={onFocus} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Show mile 675 on the map' }))
+    expect(onFocus).toHaveBeenCalledWith(675)
+  })
 })

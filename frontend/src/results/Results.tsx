@@ -11,6 +11,7 @@ interface Props {
   plan: Plan
   selected: Route['id']
   onSelect: (id: Route['id']) => void
+  onFocus?: (mile: number) => void // show this mile of the selected route on the map
 }
 
 const worst = (route: Route): Level | undefined =>
@@ -21,7 +22,7 @@ const exposureText = (route: Route) => {
 }
 const routerTag = (route: Route) => (route.router === 'valhalla' ? 'Truck route' : 'Car roads')
 
-export default function Results({ plan, selected, onSelect }: Props) {
+export default function Results({ plan, selected, onSelect, onFocus }: Props) {
   const recommended = plan.routes.find(r => r.id === plan.recommendation.route_id)!
   const route = plan.routes.find(r => r.id === selected)!
   const fastest = Math.min(...plan.routes.map(r => r.travel_seconds))
@@ -100,7 +101,7 @@ export default function Results({ plan, selected, onSelect }: Props) {
       <Box sx={{ mt: 4 }}>
         <Eyebrow>Along route {route.id}</Eyebrow>
         <Box component="ol" sx={{ listStyle: 'none', m: 0, p: 0 }}>
-          {timeline(route).map((row, i, rows) => <TimelineRow key={`${row.kind}-${row.mile}`} row={row} rail={RISK[levelAfter(rows, i)]} last={i === rows.length - 1} plan={plan} />)}
+          {timeline(route).map((row, i, rows) => <TimelineRow key={`${row.kind}-${row.mile}`} row={row} rail={RISK[levelAfter(rows, i)]} last={i === rows.length - 1} plan={plan} onFocus={onFocus} />)}
         </Box>
         <Note>
           <b>{trip.load_lb.toLocaleString('en-US')} lb load.</b> {loadEffect(trip.load_lb)} {effectOnRoute}
@@ -116,7 +117,7 @@ export default function Results({ plan, selected, onSelect }: Props) {
   )
 }
 
-function TimelineRow({ row, rail, last, plan }: { row: Row; rail: string; last: boolean; plan: Plan }) {
+function TimelineRow({ row, rail, last, plan, onFocus }: { row: Row; rail: string; last: boolean; plan: Plan; onFocus?: (mile: number) => void }) {
   let dot = ink.main, title: React.ReactNode, when = '', meta = ''
   switch (row.kind) {
     case 'depart':
@@ -142,14 +143,18 @@ function TimelineRow({ row, rail, last, plan }: { row: Row; rail: string; last: 
     }
   }
   return (
-    <Box component="li" sx={{ display: 'grid', gridTemplateColumns: '18px 1fr auto', columnGap: 1.5, position: 'relative', pb: last ? 0 : 2 }}>
+    <Box component="li" sx={{ position: 'relative', pb: last ? 0 : 2 }}>
       {!last && <Box sx={{ position: 'absolute', left: 8, top: 14, bottom: -2, width: 2, borderRadius: 1, bgcolor: rail === RISK.low ? ink[4] : rail }} />}
-      <Box sx={{ width: 18, height: 18, display: 'grid', placeItems: 'center', mt: '1px' }}>
-        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: dot, boxShadow: '0 0 0 3px #fff', position: 'relative' }} />
-      </Box>
-      <Typography sx={{ fontSize: 13, fontWeight: 500 }}>{title}</Typography>
-      <Typography variant="caption" sx={{ whiteSpace: 'nowrap', textAlign: 'right' }}>{when}</Typography>
-      {meta && <Typography variant="caption" sx={{ gridColumn: '2 / 4' }}>{meta}</Typography>}
+      <ButtonBase onClick={() => onFocus?.(row.mile)} disabled={!onFocus} aria-label={`Show mile ${Math.round(row.mile)} on the map`}
+        sx={{ display: 'grid', gridTemplateColumns: '18px 1fr auto', columnGap: 1.5, width: 1, textAlign: 'left', alignItems: 'start', borderRadius: '6px',
+          '&:hover .tw-title': { textDecoration: 'underline', textDecorationColor: 'rgba(11,11,13,.25)', textUnderlineOffset: '3px' } }}>
+        <Box sx={{ width: 18, height: 18, display: 'grid', placeItems: 'center', mt: '1px' }}>
+          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: dot, boxShadow: '0 0 0 3px #fff', position: 'relative' }} />
+        </Box>
+        <Typography className="tw-title" sx={{ fontSize: 13, fontWeight: 500 }}>{title}</Typography>
+        <Typography variant="caption" sx={{ whiteSpace: 'nowrap', textAlign: 'right' }}>{when}</Typography>
+        {meta && <Typography variant="caption" sx={{ gridColumn: '2 / 4' }}>{meta}</Typography>}
+      </ButtonBase>
     </Box>
   )
 }
