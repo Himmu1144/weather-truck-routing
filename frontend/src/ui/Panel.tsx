@@ -23,9 +23,11 @@ export default function Panel({ sheet, children }: { sheet?: SheetMode; children
   const drag = useRef<{ y: number; room: number; moved: boolean } | null>(null)
   const [dy, setDy] = useState<number | null>(null) // set while a finger drags the sheet
   const full = sheet?.full ?? false
+  const isSheet = sheet !== undefined
 
-  // Back to peeking: show the answer again, not wherever the list was scrolled to.
-  useEffect(() => { if (sheet && !full) content.current?.scrollTo({ top: 0 }) }, [sheet, full])
+  // Back to peeking: show the answer again, not wherever the list was scrolled to. Keyed on plain
+  // values: `sheet` is a new object on every render, and scrolling on every frame of play stuttered.
+  useEffect(() => { if (isSheet && !full) content.current?.scrollTo({ top: 0 }) }, [isSheet, full])
 
   const down = (e: PointerEvent) => {
     // Full, the content scrolls, so only the handle drags; peeking, the whole sheet does.
