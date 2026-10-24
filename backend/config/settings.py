@@ -82,3 +82,19 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+
+
+# Routing: Valhalla's truck router first, then OSRM servers in order. All free, no key.
+VALHALLA_URL = os.environ.get('VALHALLA_URL', 'https://valhalla1.openstreetmap.de')
+OSRM_SERVERS = os.environ.get(
+    'OSRM_SERVERS',
+    'https://router.project-osrm.org,https://routing.openstreetmap.de/routed-car',
+).split(',')
+ROUTING_TIMEOUT = (5, 15)   # seconds to connect, seconds to answer
+ROUTING_USER_AGENT = 'weather-aware-truck-routing (take-home project)'
+ROUTE_CACHE_SECONDS = 24 * 60 * 60
+
+# The truck. The load entered is cargo; routers need the whole truck, so a typical
+# empty tractor and 53 ft trailer is added. 105 km/h is a 65 mph speed governor.
+TRUCK_EMPTY_LB = 35_000
+TRUCK_TOP_SPEED_KMH = 105
