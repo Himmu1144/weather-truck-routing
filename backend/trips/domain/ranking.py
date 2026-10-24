@@ -4,8 +4,9 @@ Routes are ranked in the brief's order, with No Travel added in front because th
 brief's list leaves it out and it is worse than Severe:
   0. fewest No Travel miles   1. fewest Severe miles   2. fewest High miles
   3. lowest average risk      4. shortest travel time (arrival, with rest breaks)
-The first criterion that differs decides. Weather is compared at full precision,
-with a small tolerance for float noise. Travel time is compared in whole seconds.
+The first criterion that differs decides. Risk miles keep full precision with a small
+tolerance for float noise. Average risk uses the two decimals shown in the reason;
+travel time is compared in whole seconds.
 """
 
 from dataclasses import dataclass
@@ -45,7 +46,7 @@ CRITERIA = [
     (_miles(Level.NO_TRAVEL), lambda v: f'{v:g} mi of No Travel weather', lambda v: f'{v:g} mi'),
     (_miles(Level.SEVERE), lambda v: f'{v:g} mi of Severe weather', lambda v: f'{v:g} mi'),
     (_miles(Level.HIGH), lambda v: f'{v:g} mi of High-risk weather', lambda v: f'{v:g} mi'),
-    (lambda route: route.exposure.average_risk, lambda v: f'an average risk of {v:.2f}', lambda v: f'{v:.2f}'),
+    (lambda route: round(route.exposure.average_risk, 2), lambda v: f'an average risk of {v:.2f}', lambda v: f'{v:.2f}'),
     (lambda route: round(route.travel_seconds), duration, duration),
 ]
 

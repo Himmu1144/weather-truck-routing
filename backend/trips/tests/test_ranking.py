@@ -37,12 +37,11 @@ class OrderTests(TestCase):
         self.assertEqual(rank([faster, slower]).recommended, 'A')
         self.assertEqual(rank([slower, faster]).recommended, 'A')
 
-    def test_all_weather_criteria_keep_their_precision(self):
+    def test_risk_miles_keep_their_precision(self):
         cases = [
             ({'no_travel': 1.03, 'severe': 0.1}, {'no_travel': 1.04}),
             ({'severe': 1.03, 'high': 0.1}, {'severe': 1.04}),
             ({'high': 1.03, 'moderate': 0.1}, {'high': 1.04}),
-            ({'moderate': 1.03}, {'moderate': 1.04}),
         ]
         for safer, worse in cases:
             with self.subTest(safer=safer):
@@ -66,6 +65,32 @@ class OrderTests(TestCase):
 
 
 class ReasonTests(TestCase):
+    def test_averages_shown_as_equal_choose_the_fastest(self):
+        slower = route('B', 14, moderate=8)   # 0.008 and 0.012 both show 0.01
+        faster = route('A', 10, moderate=12)
+        for routes in [[slower, faster], [faster, slower]]:
+            with self.subTest(order=[r.name for r in routes]):
+                ranking = rank(routes)
+                self.assertEqual(ranking.order, ('A', 'B'))
+                self.assertEqual(ranking.reason, 'Route A is the fastest, with weather risk equal to Route B: '
+                                                 '10 h 0 min vs 14 h 0 min.')
+                self.assertEqual(ranking.not_chosen['B'], 'Same weather risk, but slower: 14 h 0 min vs 10 h 0 min.')
+                self.assertNotIn('safer', ranking.reason)
+
+    def test_average_risk_decides_only_when_the_shown_values_differ(self):
+        for lower, higher in [(0.12, 0.15), (0.0049, 0.0051), (0.1049, 0.1051)]:
+            with self.subTest(lower=lower, higher=higher):
+                ranking = rank([route('A', 10, moderate=higher * 1000),
+                                route('B', 14, moderate=lower * 1000)])
+                low, high = f'{lower:.2f}', f'{higher:.2f}'
+                self.assertNotEqual(low, high)
+                self.assertEqual(ranking.recommended, 'B')
+                self.assertEqual(ranking.reason,
+                                 f'Route B has an average risk of {low}, against {high} on Route A. '
+                                 'The safer weather costs 4 h 0 min over Route A, the fastest.')
+                self.assertEqual(ranking.not_chosen['A'],
+                                 f'Has an average risk of {high}, against {low} on Route B.')
+
     def test_safer_but_slower_states_the_time_cost(self):
         ranking = rank([route('A', 17.8, moderate=50), route('B', 19.9), route('C', 23.7, moderate=75)])
         self.assertEqual(ranking.order, ('B', 'A', 'C'))
