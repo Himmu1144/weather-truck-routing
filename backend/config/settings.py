@@ -46,6 +46,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'django.middleware.gzip.GZipMiddleware',   # a coast-to-coast plan is ~360 KB, ~100 KB compressed
     'django.middleware.common.CommonMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -63,6 +64,7 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [],
     'DEFAULT_PERMISSION_CLASSES': [],
     'UNAUTHENTICATED_USER': None,
+    'EXCEPTION_HANDLER': 'trips.views.api_exception_handler',
 }
 
 

@@ -75,3 +75,26 @@ def doubled_back_miles(line, miles, gap_miles=4):
             doubled += 1
         first_seen.setdefault(cell, index)
     return doubled * SAMPLE_MILES
+
+
+def simplify(points, tolerance):
+    """Indexes of the points to keep so the line stays within `tolerance` (in degrees) of the
+    original (Ramer-Douglas-Peucker). A coast-to-coast route of ~35,000 points keeps a few
+    thousand, which is plenty for drawing it."""
+    keep = {0, len(points) - 1}
+    stack = [(0, len(points) - 1)]
+    while stack:
+        first, last = stack.pop()
+        (x1, y1), (x2, y2) = points[first], points[last]
+        dx, dy = x2 - x1, y2 - y1
+        length = sqrt(dx * dx + dy * dy) or 1e-12
+        farthest, distance = None, tolerance
+        for i in range(first + 1, last):
+            x, y = points[i]
+            d = abs(dy * (x - x1) - dx * (y - y1)) / length
+            if d > distance:
+                farthest, distance = i, d
+        if farthest is not None:
+            keep.add(farthest)
+            stack += [(first, farthest), (farthest, last)]
+    return sorted(keep)
