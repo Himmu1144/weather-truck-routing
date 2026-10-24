@@ -26,7 +26,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   const body = await response.json().catch(() => null)
   if (!response.ok) {
-    throw new ApiError(response.status, body?.error ?? { code: 'error', message: `The server answered ${response.status}.` })
+    if (body?.error) throw new ApiError(response.status, body.error)
+    // No answer of ours: a proxy or host is saying the server can't be reached (502, 503, 504).
+    throw new ApiError(response.status, response.status >= 500
+      ? { code: 'network', message: 'The server isn’t answering. Try again in a moment.' }
+      : { code: 'error', message: `The server answered ${response.status}.` })
   }
   return body as T
 }

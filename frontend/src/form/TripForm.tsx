@@ -18,9 +18,10 @@ const withCommas = (text: string) => (text ? Number(text).toLocaleString('en-US'
 
 interface Props {
   onSubmit: (request: PlanRequest) => void
+  serverErrors?: Errors // fields the server refused
 }
 
-export default function TripForm({ onSubmit }: Props) {
+export default function TripForm({ onSubmit, serverErrors = {} }: Props) {
   const [origin, setOrigin] = useState<PlaceResult | null>(null)
   const [destination, setDestination] = useState<PlaceResult | null>(null)
   const [departure, setDeparture] = useState(() => toLocalInput(nextHour()))
@@ -59,21 +60,21 @@ export default function TripForm({ onSubmit }: Props) {
       </Typography>
 
       <PlaceField id="origin" label="From" placeholder="City, address, port or ZIP" value={origin}
-        onChange={p => { setOrigin(p); setErrors(e => ({ ...e, origin: undefined })) }} error={errors.origin} />
+        onChange={p => { setOrigin(p); setErrors(e => ({ ...e, origin: undefined })) }} error={errors.origin ?? serverErrors.origin} />
       <PlaceField id="destination" label="To" placeholder="Where is the load going?" value={destination}
-        onChange={p => { setDestination(p); setErrors(e => ({ ...e, destination: undefined })) }} error={errors.destination} />
+        onChange={p => { setDestination(p); setErrors(e => ({ ...e, destination: undefined })) }} error={errors.destination ?? serverErrors.destination} />
 
       <Box sx={{ display: 'grid', gridTemplateColumns: '1.45fr 1fr', gap: 2.25, mb: 2.5 }}>
         <Box>
           <FieldLabel htmlFor="departure">Departs · your time</FieldLabel>
           <TextField id="departure" type="datetime-local" variant="standard" fullWidth value={departure}
-            onChange={e => setDeparture(e.target.value)} error={Boolean(errors.departure)} helperText={errors.departure ?? viewerZone()}
+            onChange={e => setDeparture(e.target.value)} error={Boolean(errors.departure ?? serverErrors.departure)} helperText={errors.departure ?? serverErrors.departure ?? viewerZone()}
             slotProps={{ htmlInput: { min: bounds.min, max: bounds.max, step: 300 } }} />
         </Box>
         <Box>
           <FieldLabel htmlFor="load">Load (lb)</FieldLabel>
           <TextField id="load" variant="standard" fullWidth value={withCommas(load)} placeholder="40,000"
-            onChange={e => setLoad(digits(e.target.value))} error={Boolean(errors.load_lb)} helperText={errors.load_lb}
+            onChange={e => setLoad(digits(e.target.value))} error={Boolean(errors.load_lb ?? serverErrors.load_lb)} helperText={errors.load_lb ?? serverErrors.load_lb}
             slotProps={{ htmlInput: { inputMode: 'numeric', autoComplete: 'off' } }} />
         </Box>
       </Box>
