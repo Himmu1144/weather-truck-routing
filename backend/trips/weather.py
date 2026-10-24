@@ -9,8 +9,9 @@ and a second look at it (another interval, say) fit in one minute. Most trips us
 cells; a coast-to-coast trip with checkpoints every 10 miles on three routes needs about
 700 of them and reads from 34-mile cells instead. Every checkpoint still gets its own
 reading for its own hour.
-Cells are fetched in batches, only for the hours the trips need, in mph and inches,
-and cached for 30 minutes.
+Cells are fetched in batches, only for the days the trips need, in mph and inches,
+and cached for 30 minutes. Each cell also says its time zone, so times can be shown in
+the local time of the place.
 
 Reading a forecast at a moment:
 - wind and gusts are instantaneous, so they are blended between the two nearest hours;
@@ -28,6 +29,7 @@ from django.conf import settings
 from django.core.cache import cache
 
 HOUR = 3600
+DAY = 24 * HOUR
 HOURLY = 'wind_speed_10m,wind_gusts_10m,rain,showers,snowfall'
 GRIDS_DEGREES = (0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5)   # about 7 to 34 miles
 MILES_PER_DEGREE = 69
@@ -47,6 +49,7 @@ class Reading:
     gust_mph: float
     rain_in_hr: float
     snow_in_hr: float
+    time_zone: str      # e.g. 'America/Chicago'
 
 
 @dataclass(frozen=True)
@@ -92,14 +95,15 @@ def _forecasts(cells, first, last):
 
 
 def _fetch(cells, first, last):
-    def hour(t):
-        return datetime.fromtimestamp(t, UTC).strftime('%Y-%m-%dT%H:%M')
+    # Days are in each place's local time, so a day either side covers every US time zone.
+    def day(t):
+        return datetime.fromtimestamp(t, UTC).date().isoformat()
 
     params = {
         'latitude': ','.join(f'{lat:.2f}' for _, lat in cells),
         'longitude': ','.join(f'{lon:.2f}' for lon, _ in cells),
         'hourly': HOURLY, 'wind_speed_unit': 'mph', 'precipitation_unit': 'inch',
-        'timezone': 'GMT', 'timeformat': 'unixtime', 'start_hour': hour(first), 'end_hour': hour(last),
+        'timezone': 'auto', 'timeformat': 'unixtime', 'start_date': day(first - DAY), 'end_date': day(last + DAY),
     }
     try:
         response = requests.get(settings.OPEN_METEO_URL, params=params, timeout=settings.WEATHER_TIMEOUT)
@@ -117,6 +121,7 @@ def _fetch(cells, first, last):
         'gust': entry['hourly']['wind_gusts_10m'],
         'rain': [(a or 0) + (b or 0) for a, b in zip(entry['hourly']['rain'], entry['hourly']['showers'])],
         'snow': entry['hourly']['snowfall'],
+        'zone': entry['timezone'],
     } for entry in data]
 
 
@@ -130,4 +135,5 @@ def _reading(forecast, when):
         a, b = values[h] or 0, values[i] or 0
         return a + (b - a) * t
 
-    return Reading(blend(forecast['wind']), blend(forecast['gust']), forecast['rain'][i] or 0, forecast['snow'][i] or 0)
+    return Reading(blend(forecast['wind']), blend(forecast['gust']), forecast['rain'][i] or 0, forecast['snow'][i] or 0,
+                   forecast['zone'])

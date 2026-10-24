@@ -14,7 +14,8 @@ H = 3600
 
 
 def hourly(wind, gust, rain, showers, snow):
-    return {'hourly': {'time': [T0 + k * H for k in range(len(wind))], 'wind_speed_10m': wind,
+    return {'timezone': 'America/Chicago',
+            'hourly': {'time': [T0 + k * H for k in range(len(wind))], 'wind_speed_10m': wind,
                        'wind_gusts_10m': gust, 'rain': rain, 'showers': showers, 'snowfall': snow}}
 
 
@@ -31,12 +32,13 @@ class WeatherTests(SimpleTestCase):
         self.get = patcher.start()
         self.addCleanup(patcher.stop)
 
-    def test_asks_for_the_units_and_hours_the_rules_use(self):
+    def test_asks_for_the_units_and_days_the_rules_use(self):
         self.get.return_value = answer(hourly([10, 12], [15, 18], [0, 0], [0, 0], [0, 0]))
-        readings([((-87.63, 41.88), T0 + 1800)])
+        reading, = readings([((-87.63, 41.88), T0 + 1800)]).readings
         params = self.get.call_args.kwargs['params']
         self.assertEqual((params['wind_speed_unit'], params['precipitation_unit']), ('mph', 'inch'))
-        self.assertEqual((params['start_hour'], params['end_hour']), ('2026-10-25T10:00', '2026-10-25T11:00'))
+        self.assertEqual((params['start_date'], params['end_date']), ('2026-10-24', '2026-10-26'))
+        self.assertEqual(reading.time_zone, 'America/Chicago')
 
     def test_reading_at_a_moment(self):
         # 10:00 and 11:00; the truck is there at 10:15
@@ -51,7 +53,7 @@ class WeatherTests(SimpleTestCase):
         self.get.return_value = answer(hourly([10], [10], [0], [0], [0]))
         result = readings([((-87.63, 41.88), T0), ((-87.61, 41.89), T0)])   # about a mile apart
         self.assertEqual(self.get.call_args.kwargs['params']['latitude'], '41.90')
-        self.assertEqual(result.readings, [Reading(10, 10, 0, 0)] * 2)
+        self.assertEqual(result.readings, [Reading(10, 10, 0, 0, 'America/Chicago')] * 2)
         self.assertEqual(result.grid_miles, 7)
 
     @override_settings(WEATHER_BATCH=2)
