@@ -1,11 +1,11 @@
-// The heatmap on the graphics card. All 49 hours of weather go to the GPU once; moving the
+// The heatmap on the graphics card. All forecast hours of weather go to the GPU once; moving the
 // slider only changes one number (uHour), so it never waits and never refetches.
 // Every screen pixel works out its own weather (smooth bicubic blend of the grid), its level
 // at the brief's thresholds, and a soft fade at the corridor's edge. Approved prototype look.
 import type { CustomLayerInterface, Map as MapLibre } from 'maplibre-gl'
 import { MercatorCoordinate } from 'maplibre-gl'
 import type { Grid } from './grid'
-import { HOURS, type HeatWeather } from './weather'
+import type { HeatWeather } from './weather'
 
 export type HeatView = 'risk' | 'wind' | 'rain' | 'snow'
 const VIEWS: Record<HeatView, number> = { risk: 0, wind: 1, rain: 2, snow: 3 }
@@ -20,10 +20,10 @@ void main() { vMerc = aPos; gl_Position = uMatrix * vec4(aPos, 0.0, 1.0); }`
 const FRAGMENT = `#version 300 es
 precision highp float; precision highp sampler2D;
 in vec2 vMerc; out vec4 outColor;
-uniform sampler2D uWx;    // cols x (rows * 49): wind, rain, snow of each cell, hour after hour
+uniform sampler2D uWx;    // cols x (rows * uHours): wind, rain, snow of each cell, hour after hour
 uniform sampler2D uDist;  // km to the nearest route, 0..1 = 0..100 km
 uniform float uHour; uniform ivec2 uSize; uniform vec4 uBox; uniform float uStep;
-uniform int uView; uniform float uLoad; uniform vec4 uPal[5];
+uniform int uHours; uniform int uView; uniform float uLoad; uniform vec4 uPal[5];
 const float PI = 3.141592653589793;
 vec3 cell(int i, int j, int h) {
   i = clamp(i, 0, uSize.y - 1); j = clamp(j, 0, uSize.x - 1);
@@ -43,7 +43,7 @@ vec4 palette(float l) { int a = int(floor(l)); return mix(uPal[clamp(a, 0, 4)], 
 void main() {
   float lon = vMerc.x * 360.0 - 180.0, lat = degrees(atan(sinh(PI * (1.0 - 2.0 * vMerc.y))));
   vec2 g = vec2((lon - uBox.x) / uStep - 0.5, (lat - uBox.y) / uStep - 0.5);
-  int h0 = int(floor(uHour)), h1 = min(h0 + 1, ${HOURS - 1});
+  int h0 = int(floor(uHour)), h1 = min(h0 + 1, uHours - 1);
   vec3 v = mix(bicubic(g, h0), bicubic(g, h1), fract(uHour));
   float km = texture(uDist, vec2((lon - uBox.x) / (uBox.z - uBox.x), (lat - uBox.y) / (uBox.w - uBox.y))).r * 100.0;
   float fade = 1.0 - smoothstep(48.0, 82.0, km);
@@ -64,13 +64,13 @@ void main() {
 /** Each hour's grid with the empty cells around the corridor filled from their neighbours,
  *  so the smooth blend near the edge has values to work with. Exported for tests. */
 export function fieldTexture(grid: Grid, weather: HeatWeather): Float32Array {
-  const { rows, cols } = grid, data = new Float32Array(cols * rows * HOURS * 4)
+  const { rows, cols } = grid, data = new Float32Array(cols * rows * weather.hours * 4)
   const at = (h: number, i: number, j: number) => ((h * rows + i) * cols + j) * 4
-  for (let h = 0; h < HOURS; h++) {
+  for (let h = 0; h < weather.hours; h++) {
     const known = new Uint8Array(rows * cols)
     grid.cells.forEach((c, k) => {
       const p = at(h, c.i, c.j)
-      data[p] = weather.wind[k * HOURS + h]; data[p + 1] = weather.rain[k * HOURS + h]; data[p + 2] = weather.snow[k * HOURS + h]; data[p + 3] = 1
+      data[p] = weather.wind[k * weather.hours + h]; data[p + 1] = weather.rain[k * weather.hours + h]; data[p + 2] = weather.snow[k * weather.hours + h]; data[p + 3] = 1
       known[c.i * cols + c.j] = 1
     })
     for (let pass = 0; pass < 5; pass++) {
@@ -113,7 +113,7 @@ export function heatLayer(grid: Grid, weather: HeatWeather, loadLb: number): Hea
       }
       program = gl.createProgram()!
       gl.attachShader(program, shader(gl.VERTEX_SHADER, VERTEX)); gl.attachShader(program, shader(gl.FRAGMENT_SHADER, FRAGMENT)); gl.linkProgram(program)
-      for (const name of ['uMatrix', 'uWx', 'uDist', 'uHour', 'uSize', 'uBox', 'uStep', 'uView', 'uLoad', 'uPal']) loc[name] = gl.getUniformLocation(program, name)
+      for (const name of ['uMatrix', 'uWx', 'uDist', 'uHour', 'uHours', 'uSize', 'uBox', 'uStep', 'uView', 'uLoad', 'uPal']) loc[name] = gl.getUniformLocation(program, name)
       position = gl.getAttribLocation(program, 'aPos')
       const [west, south, east, north] = grid.box
       const a = MercatorCoordinate.fromLngLat([west, north]), b = MercatorCoordinate.fromLngLat([east, south])
@@ -129,7 +129,7 @@ export function heatLayer(grid: Grid, weather: HeatWeather, loadLb: number): Hea
 
       fieldTex = gl.createTexture()!
       gl.bindTexture(gl.TEXTURE_2D, fieldTex)
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, grid.cols, grid.rows * HOURS, 0, gl.RGBA, gl.FLOAT, fieldTexture(grid, weather))
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, grid.cols, grid.rows * weather.hours, 0, gl.RGBA, gl.FLOAT, fieldTexture(grid, weather))
       for (const p of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_2D, p, gl.NEAREST)
     },
     onRemove() {
@@ -141,7 +141,8 @@ export function heatLayer(grid: Grid, weather: HeatWeather, loadLb: number): Hea
       gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, fieldTex); gl.uniform1i(loc.uWx, 0)
       gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, distTex); gl.uniform1i(loc.uDist, 1)
       // the grid's first hour is the departure rounded down; hour 0 of the slider is the departure itself
-      gl.uniform1f(loc.uHour, Math.min(HOURS - 1, hour + weather.offset))
+      gl.uniform1f(loc.uHour, Math.min(weather.hours - 1, hour + weather.offset))
+      gl.uniform1i(loc.uHours, weather.hours)
       gl.uniform2i(loc.uSize, grid.cols, grid.rows)
       gl.uniform4f(loc.uBox, ...grid.box); gl.uniform1f(loc.uStep, grid.step)
       gl.uniform1i(loc.uView, VIEWS[view]); gl.uniform1f(loc.uLoad, loadLb)
