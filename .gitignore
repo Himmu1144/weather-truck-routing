@@ -9,3 +9,4 @@ db.sqlite3
 data/cache/
 node_modules/
 dist/
+.vercel/
