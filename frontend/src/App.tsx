@@ -2,6 +2,7 @@ import { Box, Button, Stack, Typography } from '@mui/material'
 import { lazy, Suspense, useState } from 'react'
 import type { Plan, Route } from './api/types'
 import type { Focus } from './map/TripMap'
+import { useHeatWeather } from './heat/useHeatWeather'
 import TripForm from './form/TripForm'
 import FailedNote from './plan/FailedNote'
 import { fieldErrors } from './plan/messages'
@@ -23,12 +24,13 @@ export default function App() {
   const selected = plan ? (choice?.plan === plan ? choice.id : plan.recommendation.route_id) : null
   const select = (id: Route['id']) => plan && setChoice({ plan, id })
   const [focus, setFocus] = useState<Focus | null>(null)
+  const { heat } = useHeatWeather(plan)
   const focusOn = (mile: number) => setFocus(f => ({ mile, seq: (f?.seq ?? 0) + 1 }))
 
   return (
     <Box sx={{ position: 'fixed', inset: 0, bgcolor: 'background.default' }}>
       <Suspense fallback={null}>
-        <TripMap plan={plan} selected={selected} onSelect={select} focus={focus} padding={PANEL_PADDING} />
+        <TripMap plan={plan} selected={selected} onSelect={select} focus={focus} heat={heat} hour={0} view="risk" padding={PANEL_PADDING} />
       </Suspense>
       <Panel>
         <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 3.25 }}>

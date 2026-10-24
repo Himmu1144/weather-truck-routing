@@ -8,6 +8,8 @@ import { duration } from '../lib/format'
 import { ink, RISK } from '../theme'
 import { bounds, checkpointFeatures, labelMile, pointAt, routeFeatures } from './geometry'
 import './map.css'
+import { heatLayer, type HeatLayer, type HeatView } from '../heat/layer'
+import type { HeatState } from '../heat/useHeatWeather'
 import CheckpointCard from './CheckpointCard'
 import { pin, restStop, routeLabel } from './markers'
 
@@ -32,6 +34,9 @@ interface Props {
   selected: Route['id'] | null
   onSelect: (id: Route['id']) => void
   focus: Focus | null // a mile on the selected route to fly to
+  heat: HeatState
+  hour: number // hours after departure shown by the heatmap
+  view: HeatView
   padding: PaddingOptions // the part of the map the panel covers
 }
 
@@ -48,10 +53,11 @@ function webgl(): boolean {
 }
 
 /** The map. The plan never depends on it: without WebGL the panel still shows everything. */
-export default function TripMap({ plan, selected, onSelect, focus, padding }: Props) {
+export default function TripMap({ plan, selected, onSelect, focus, heat, hour, view, padding }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const map = useRef<MapLibre | null>(null)
   const markers = useRef<Marker[]>([])
+  const heatRef = useRef<HeatLayer | null>(null)
   const [supported] = useState(webgl)
   const [ready, setReady] = useState(false) // our layers are in (the style is read)
   // The basemap's own files (tiles, fonts) can take long on a slow connection: say so, never a silent blank.
@@ -135,6 +141,22 @@ export default function TripMap({ plan, selected, onSelect, focus, padding }: Pr
     if (plan) m.fitBounds(new LngLatBounds(...bounds(plan)), { padding: { top: 70, bottom: 70, left: 60, right: 130 }, duration: 1200 })
     else m.easeTo({ ...US, duration: 1000 })
   }, [ready, plan, padding])
+
+  // The heatmap: a new layer for each plan's weather, under the roads and place names so they stay readable.
+  const grid = heat.status === 'ready' ? heat.grid : null, weather = heat.status === 'ready' ? heat.weather : null
+  const loadLb = plan?.trip.load_lb ?? 0
+  useEffect(() => {
+    const m = map.current
+    if (!ready || !m) return
+    if (m.getLayer('heat')) m.removeLayer('heat')
+    heatRef.current = null
+    if (!grid || !weather) return
+    const layer = heatLayer(grid, weather, loadLb)
+    m.addLayer(layer, m.getStyle().layers.find(l => 'source-layer' in l && l['source-layer'] === 'transportation')?.id)
+    heatRef.current = layer
+  }, [ready, grid, weather, loadLb])
+  useEffect(() => { heatRef.current?.setHour(hour) }, [hour, grid])
+  useEffect(() => { heatRef.current?.setView(view) }, [view, grid])
 
   // The selected route: in colour on top, its checkpoints and rest stops shown; the others grey.
   useEffect(() => {
