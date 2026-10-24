@@ -43,6 +43,25 @@ export const theme = createTheme({
         body: { fontFeatureSettings: '"tnum" 1, "cv11" 1', WebkitFontSmoothing: 'antialiased' },
       },
     },
+    // inputs with only a line underneath, like the agreed mockup
+    MuiInput: {
+      styleOverrides: {
+        root: {
+          fontSize: 15,
+          '&::before': { borderBottomColor: 'rgba(11, 11, 13, .13)' },
+          '&:hover:not(.Mui-disabled, .Mui-error)::before': { borderBottomColor: ink[3] },
+        },
+        input: { padding: '6px 0 9px', '&::placeholder': { color: ink[4], opacity: 1 } },
+      },
+    },
+    MuiFormHelperText: { styleOverrides: { root: { fontSize: 12, marginTop: 6 } } },
+    MuiAutocomplete: {
+      styleOverrides: {
+        paper: { borderRadius: 14, marginTop: 6, boxShadow: '0 0 0 1px rgba(11,11,13,.07), 0 18px 40px -12px rgba(16,24,40,.3)' },
+        groupLabel: { fontSize: 10, fontWeight: 600, letterSpacing: '.14em', textTransform: 'uppercase', color: ink[3], lineHeight: '30px' },
+        listbox: { padding: '4px 0 8px' },
+      },
+    },
     MuiButton: {
       defaultProps: { disableElevation: true },
       styleOverrides: { root: { borderRadius: 13 } },

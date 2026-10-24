@@ -34,7 +34,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   health: () => request<{ status: string }>('/api/health/'),
   places: (q: string, source: 'towns' | 'search', signal?: AbortSignal) =>
-    request<{ results: PlaceResult[] }>(`/api/places/?${new URLSearchParams({ q, source })}`, { signal }),
+    // unavailable: the online search failed or was too slow (towns never are)
+    request<{ results: PlaceResult[]; unavailable?: boolean }>(`/api/places/?${new URLSearchParams({ q, source })}`, { signal }),
   plan: (body: PlanRequest, signal?: AbortSignal) =>
     request<Plan>('/api/plans/', { method: 'POST', body: JSON.stringify(body), signal }),
 }
