@@ -9,7 +9,6 @@ the 30-minute break, and the longest US trips are about 60 h of driving, under t
 70-hour weekly limit. A break or rest is only taken if there is still driving to do.
 """
 
-from bisect import bisect_left
 from dataclasses import dataclass
 
 HOUR = 3600
@@ -47,13 +46,3 @@ def elapsed(drive_seconds, stops):
     truck has just arrived, so that stop isn't counted yet."""
     return drive_seconds + sum(stop.duration_seconds for stop in stops if stop.drive_seconds < drive_seconds)
 
-
-def mile_at(drive_seconds, timeline):
-    """Where the truck is after driving this long. timeline: (mile, drive_seconds) pairs along
-    the route, both increasing, from (0, 0) to the destination."""
-    times = [seconds for _, seconds in timeline]
-    i = min(max(bisect_left(times, drive_seconds), 1), len(timeline) - 1)
-    (mile_a, time_a), (mile_b, time_b) = timeline[i - 1], timeline[i]
-    if time_b == time_a:
-        return mile_b
-    return mile_a + (mile_b - mile_a) * (drive_seconds - time_a) / (time_b - time_a)

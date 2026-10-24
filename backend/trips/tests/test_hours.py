@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from trips.domain.hours import HOUR, elapsed, mile_at, stops_for
+from trips.domain.hours import HOUR, elapsed, stops_for
 
 
 def plan(hours):
@@ -39,10 +39,3 @@ class ElapsedTests(TestCase):
     def test_no_stops_means_nonstop(self):
         self.assertEqual(elapsed(30 * HOUR, ()), 30 * HOUR)
 
-
-class MileTests(TestCase):
-    def test_position_between_timeline_points(self):
-        timeline = [(0, 0), (60, HOUR), (90, 2 * HOUR)]
-        for seconds, mile in [(0, 0), (HOUR / 2, 30), (HOUR, 60), (1.5 * HOUR, 75), (2 * HOUR, 90)]:
-            with self.subTest(seconds=seconds):
-                self.assertEqual(mile_at(seconds, timeline), mile)
