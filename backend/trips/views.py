@@ -34,8 +34,12 @@ def health(request):
 def places(request):
     """?q=den&source=towns (local, instant) or source=search (addresses, ZIP codes, ports)."""
     query = request.query_params.get('q', '')
-    search = search_addresses if request.query_params.get('source') == 'search' else search_towns
-    return Response({'results': search(query)})
+    if request.query_params.get('source') != 'search':
+        return Response({'results': search_towns(query)})
+    found = search_addresses(query)
+    if found is None:
+        return Response({'results': [], 'unavailable': True})   # towns still work; the form says so
+    return Response({'results': found})
 
 
 @api_view(['POST'])

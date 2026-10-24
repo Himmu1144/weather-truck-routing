@@ -59,6 +59,7 @@ class AddressTests(SimpleTestCase):
             feature(name='Walmart Distribution Center', city='Bentonville', osm_key='landuse', osm_value='industrial'),
             feature(name='Walmart Supercenter', city='Bentonville', osm_key='shop', osm_value='supermarket'),
             feature(name='Walmart', city='Toronto', countrycode='CA', state='Ontario', osm_key='building'),
+            feature(name='Bentonville', county='Benton', osm_key='place', osm_value='town'),   # the local list has towns
             feature(housenumber='1600', street='Pennsylvania Avenue Northwest', name='White House',
                     city='Washington', state='District of Columbia', postcode='20500', osm_key='office'),
         )})
@@ -72,9 +73,9 @@ class AddressTests(SimpleTestCase):
                                                                osm_key='place', osm_value='postcode'))}, '75201')
         self.assertEqual(found[0]['label'], '75201, Dallas, TX')
 
-    def test_photon_down_gives_no_addresses_not_an_error(self):
+    def test_photon_down_is_reported_not_an_error(self):
         found, _ = self.search({'side_effect': requests.Timeout()})
-        self.assertEqual(found, [])
+        self.assertIsNone(found)
 
     def test_repeat_searches_come_from_the_cache(self):
         response = {'return_value': photon(feature(name='Port of Long Beach', city='Long Beach', state='California'))}
@@ -88,3 +89,9 @@ class EndpointTests(SimpleTestCase):
         results = self.client.get('/api/places/', {'q': 'seat'}).json()['results']
         self.assertEqual(results[0]['label'], 'Seattle, WA')
         self.assertEqual(results[0]['kind'], 'town')
+
+    def test_photon_down_says_unavailable(self):
+        cache.clear()
+        with patch.object(places.requests, 'get', side_effect=requests.Timeout()):
+            data = self.client.get('/api/places/', {'q': 'port of long beach', 'source': 'search'}).json()
+        self.assertEqual(data, {'results': [], 'unavailable': True})

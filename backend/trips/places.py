@@ -111,11 +111,14 @@ def search_towns(query, limit=LIMIT):
 # Photon
 
 # The kinds of OpenStreetMap places a truck doesn't drive to.
-SKIPPED_KEYS = {'shop', 'amenity', 'leisure', 'tourism', 'craft', 'healthcare', 'historic', 'natural', 'waterway'}
+SKIPPED_KEYS = {'shop', 'amenity', 'leisure', 'tourism', 'craft', 'healthcare', 'historic', 'natural', 'waterway', 'boundary'}
+# Towns come from the local list; the online search adds only what that list can't find.
+TOWN_VALUES = {'city', 'town', 'village', 'hamlet', 'suburb', 'neighbourhood', 'locality', 'county', 'state'}
 
 
 def search_addresses(query, limit=LIMIT):
-    """Addresses, businesses, ports, airports and ZIP codes. An empty list if Photon fails."""
+    """Addresses, businesses, ports, airports and ZIP codes. None if Photon fails or is too slow,
+    so the answer can say "unavailable" rather than "nothing found"."""
     query = query.strip()
     if len(query) < 3:
         return []
@@ -130,7 +133,7 @@ def search_addresses(query, limit=LIMIT):
         except (requests.RequestException, ValueError, KeyError):
             features = None
         if features is None:
-            return []
+            return None
         found = list({place['label']: place for place in map(_address, features) if place}.values())
         django_cache.set(key, found, 24 * 60 * 60)
     return found[:limit]
@@ -139,6 +142,8 @@ def search_addresses(query, limit=LIMIT):
 def _address(feature):
     p = feature['properties']
     if p.get('countrycode') != 'US' or p.get('state') not in STATE_CODES or p.get('osm_key') in SKIPPED_KEYS:
+        return None
+    if p.get('osm_key') == 'place' and p.get('osm_value') in TOWN_VALUES:
         return None
     street = ' '.join(filter(None, [p.get('housenumber'), p.get('street')]))
     town = p.get('city') or p.get('county')
