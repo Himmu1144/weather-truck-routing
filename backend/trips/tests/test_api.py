@@ -3,6 +3,7 @@
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.core.cache import cache
 from django.test import SimpleTestCase
 from django.utils import timezone
 
@@ -10,6 +11,7 @@ from trips import planner
 from trips.options import Options
 from trips.routing import NoRoute, RoutingUnavailable
 from trips.tests.test_options import FASTEST, NORTH, SOUTH
+from trips.tests.test_weather import answer, hourly
 from trips.weather import Lookup, Reading, WeatherUnavailable
 
 WEST = {'label': 'West, OK', 'lat': 35.0, 'lon': -100.0}
@@ -120,3 +122,16 @@ class ServiceErrorTests(SimpleTestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response['Retry-After'], '30')
         self.assertEqual(response.json()['error']['code'], 'weather_busy')
+
+    def test_null_upstream_weather_returns_502(self):
+        cache.clear()
+        data = hourly([None] * 24, [15] * 24, [0] * 24, [0] * 24, [0] * 24)
+        start = int(timezone.now().timestamp() // 3600) * 3600
+        data['hourly']['time'] = [start + k * 3600 for k in range(24)]
+        with patch.object(planner, 'route_options', return_value=Options([FASTEST], None)), \
+             patch.object(planner.weather.requests, 'get', return_value=answer(data)):
+            response = PlanTests.request(self)
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()['error']['code'], 'weather_unavailable')
+        self.assertEqual(response.json()['error']['message'],
+                         'The weather service returned incomplete data. Try again in a moment.')

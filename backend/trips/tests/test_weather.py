@@ -49,6 +49,45 @@ class WeatherTests(SimpleTestCase):
         self.assertAlmostEqual(reading.rain_in_hr, 0.35)   # the 10:00-11:00 total, rain plus showers
         self.assertEqual(reading.snow_in_hr, 0.1)
 
+    def test_null_readings_are_unavailable_not_calm(self):
+        for field in ['wind_speed_10m', 'wind_gusts_10m', 'rain', 'showers', 'snowfall']:
+            with self.subTest(field=field):
+                cache.clear()
+                data = hourly([10, 20], [15, 25], [0, 0], [0, 0], [0, 0])
+                data['hourly'][field][1] = None
+                self.get.return_value = answer(data)
+                with self.assertRaisesMessage(WeatherUnavailable, 'returned incomplete data'):
+                    readings([((-87.63, 41.88), T0 + 900)])
+
+    def test_missing_fields_and_short_arrays_are_unavailable(self):
+        for field in ['wind_speed_10m', 'wind_gusts_10m', 'rain', 'showers', 'snowfall']:
+            for missing_field in [True, False]:
+                with self.subTest(field=field, missing_field=missing_field):
+                    cache.clear()
+                    data = hourly([10, 20], [15, 25], [0, 0], [0, 0], [0, 0])
+                    if missing_field:
+                        del data['hourly'][field]
+                    else:
+                        data['hourly'][field] = [0]
+                    self.get.return_value = answer(data)
+                    with self.assertRaisesMessage(WeatherUnavailable, 'returned incomplete data'):
+                        readings([((-87.63, 41.88), T0 + 900)])
+
+    def test_both_wind_samples_are_needed_between_hours(self):
+        self.get.return_value = answer(hourly([None, 20], [15, 25], [0, 0], [0, 0], [0, 0]))
+        with self.assertRaisesMessage(WeatherUnavailable, 'returned incomplete data'):
+            readings([((-87.63, 41.88), T0 + 900)])
+
+    def test_an_exact_hour_does_not_need_the_previous_wind(self):
+        self.get.return_value = answer(hourly([None, 20], [None, 25], [None, 0], [None, 0], [None, 0]))
+        reading, = readings([((-87.63, 41.88), T0 + H)]).readings
+        self.assertEqual(reading, Reading(20, 25, 0, 0, 'America/Chicago'))
+
+    def test_missing_forecast_hour_is_unavailable(self):
+        self.get.return_value = answer(hourly([10], [15], [0], [0], [0]))
+        with self.assertRaisesMessage(WeatherUnavailable, 'returned incomplete data'):
+            readings([((-87.63, 41.88), T0 + 900)])
+
     def test_nearby_points_share_one_lookup(self):
         self.get.return_value = answer(hourly([10], [10], [0], [0], [0]))
         result = readings([((-87.63, 41.88), T0), ((-87.61, 41.89), T0)])   # about a mile apart

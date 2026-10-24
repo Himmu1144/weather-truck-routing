@@ -31,6 +31,7 @@ from django.core.cache import cache
 HOUR = 3600
 DAY = 24 * HOUR
 HOURLY = 'wind_speed_10m,wind_gusts_10m,rain,showers,snowfall'
+INCOMPLETE = 'The weather service returned incomplete data. Try again in a moment.'
 GRIDS_DEGREES = (0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5)   # about 7 to 34 miles
 MILES_PER_DEGREE = 69
 
@@ -121,27 +122,47 @@ def _fetch(cells, first, last):
         raise WeatherUnavailable('The free weather service is busy. Try again in a minute.', busy=True)
     if response.status_code != 200:
         raise WeatherUnavailable('The weather service could not give a forecast for these dates.')
-    data = response.json()
-    data = data if isinstance(data, list) else [data]   # a single location comes back unwrapped
-    return [{
-        'time': entry['hourly']['time'],
-        'wind': entry['hourly']['wind_speed_10m'],
-        'gust': entry['hourly']['wind_gusts_10m'],
-        'rain': [(a or 0) + (b or 0) for a, b in zip(entry['hourly']['rain'], entry['hourly']['showers'])],
-        'snow': entry['hourly']['snowfall'],
-        'zone': entry['timezone'],
-    } for entry in data]
+    try:
+        data = response.json()
+        data = data if isinstance(data, list) else [data]   # a single location comes back unwrapped
+        return [{
+            'time': entry['hourly']['time'],
+            'wind': entry['hourly']['wind_speed_10m'],
+            'gust': entry['hourly']['wind_gusts_10m'],
+            'rain': [a + b if a is not None and b is not None else None
+                     for a, b in zip(entry['hourly']['rain'], entry['hourly']['showers'])],
+            'snow': entry['hourly']['snowfall'],
+            'zone': entry['timezone'],
+        } for entry in data]
+    except (KeyError, TypeError, ValueError) as error:
+        raise WeatherUnavailable(INCOMPLETE) from error
 
 
 def _reading(forecast, when):
-    times = forecast['time']
-    i = min(max(math.ceil((when - times[0]) / HOUR), 0), len(times) - 1)   # the hour ending at or after `when`
-    h = i - 1 if i > 0 else 0
-    t = 0.0 if i == h else (when - times[h]) / HOUR
+    try:
+        times = forecast['time']
+        if not times[0] <= when <= times[-1]:
+            raise ValueError('Missing forecast hour')
+        i = math.ceil((when - times[0]) / HOUR)   # the hour ending at or after `when`
+        h = i - 1 if i > 0 else 0
+        if times[i] != times[0] + i * HOUR or times[h] != times[0] + h * HOUR:
+            raise ValueError('Missing forecast hour')
+        t = 0.0 if i == h else (when - times[h]) / HOUR
 
-    def blend(values):
-        a, b = values[h] or 0, values[i] or 0
-        return a + (b - a) * t
+        def value(values, index):
+            reading = values[index]
+            if reading is None or not math.isfinite(reading):
+                raise ValueError('Missing weather reading')
+            return reading
 
-    return Reading(blend(forecast['wind']), blend(forecast['gust']), forecast['rain'][i] or 0, forecast['snow'][i] or 0,
-                   forecast['zone'])
+        def blend(values):
+            b = value(values, i)
+            if i == h or when == times[i]:
+                return b
+            a = value(values, h)
+            return a + (b - a) * t
+
+        return Reading(blend(forecast['wind']), blend(forecast['gust']),
+                       value(forecast['rain'], i), value(forecast['snow'], i), forecast['zone'])
+    except (KeyError, IndexError, TypeError, ValueError) as error:
+        raise WeatherUnavailable(INCOMPLETE) from error
