@@ -5,8 +5,7 @@ How the table is read:
   an edge takes the higher, safer band: 0.25 in/hr is High, 35 mph is High.
 - No Travel follows the table's own sign: wind of 55 mph is No Travel (">= 55"), but rain of
   exactly 1.00 in/hr and snow of exactly 3.0 in/hr stay Severe ("> 1.00", "> 3.0").
-- Readings are rounded to the precision shown on screen before they are classified, so the
-  value a driver sees always matches its level.
+- Raw readings decide the level; reasons keep enough digits to explain it.
 - Wind is the steady wind; gusts are shown elsewhere but not scored.
 - A checkpoint takes its worst condition. The load rules only ever raise the wind's level.
 """
@@ -58,9 +57,17 @@ class Assessment:
     reason: str             # e.g. "Severe: rain 0.60 in/hr"
 
 
-def assess(wind_mph, rain_in_hr, snow_in_hr, load_lb):
-    wind_mph, rain_in_hr, snow_in_hr = round(wind_mph, 1), round(rain_in_hr, 2), round(snow_in_hr, 2)
+def shown(value, edges, places, *, no_travel_includes_edge):
+    level = band(value, edges, no_travel_includes_edge=no_travel_includes_edge)
+    # Keep extra digits when rounding would put the reading in another band.
+    while True:
+        text = f'{value:.{places}f}'
+        if band(float(text), edges, no_travel_includes_edge=no_travel_includes_edge) == level:
+            return text
+        places += 1
 
+
+def assess(wind_mph, rain_in_hr, snow_in_hr, load_lb):
     wind_by_table = band(wind_mph, WIND_MPH, no_travel_includes_edge=True)
     limit = LOAD_RULES.get(wind_by_table)
     load_raised_wind = limit is not None and load_lb > limit
@@ -76,11 +83,11 @@ def assess(wind_mph, rain_in_hr, snow_in_hr, load_lb):
         reason = 'Low: no condition reaches Moderate'
     else:
         parts = {
-            'wind': f'wind {wind_mph:.1f} mph' + (
+            'wind': f'wind {shown(wind_mph, WIND_MPH, 1, no_travel_includes_edge=True)} mph' + (
                 f' with a {load_lb:,} lb load ({wind_by_table.label} at {limit:,} lb or less)'
                 if load_raised_wind else ''),
-            'rain': f'rain {rain_in_hr:.2f} in/hr',
-            'snow': f'snow {snow_in_hr:.2f} in/hr',
+            'rain': f'rain {shown(rain_in_hr, RAIN_IN_HR, 2, no_travel_includes_edge=False)} in/hr',
+            'snow': f'snow {shown(snow_in_hr, SNOW_IN_HR, 2, no_travel_includes_edge=False)} in/hr',
         }
         reason = f'{level.label}: ' + ' and '.join(parts[name] for name in causes)
 

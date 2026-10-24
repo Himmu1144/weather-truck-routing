@@ -20,6 +20,11 @@ describe('CheckpointCard', () => {
     expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()   // a hover card can't be clicked
   })
 
+  it('shows snow to two decimal places', () => {
+    render(<CheckpointCard checkpoint={{ ...severe, snow_in_hr: 3.01 }} x={500} y={400} />)
+    expect(screen.getByText('Snow').closest('tr')).toHaveTextContent('3.01 in/hr')
+  })
+
   it('a pinned card can be closed', async () => {
     const onClose = vi.fn()
     render(<CheckpointCard checkpoint={severe} x={500} y={400} onClose={onClose} />)

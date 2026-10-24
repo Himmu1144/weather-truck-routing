@@ -21,7 +21,7 @@ export default function CheckpointCard({ checkpoint: c, x, y, area, onClose }: P
     ['Wind', `${c.wind_mph.toFixed(1)} mph`, c.causes.includes('wind')],
     ['Gusts', `${c.gust_mph.toFixed(1)} mph`, false],
     ['Rain', `${c.rain_in_hr.toFixed(2)} in/hr`, c.causes.includes('rain')],
-    ['Snow', `${c.snow_in_hr.toFixed(1)} in/hr`, c.causes.includes('snow')],
+    ['Snow', `${c.snow_in_hr.toFixed(2)} in/hr`, c.causes.includes('snow')],
   ]
   return (
     <MapCard x={x} y={y} area={area} label={`Checkpoint at mile ${Math.round(c.mile)}`} onClose={onClose}>

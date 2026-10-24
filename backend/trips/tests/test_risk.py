@@ -82,13 +82,21 @@ class CombinedTests(TestCase):
         self.assertEqual(result.reason, 'Low: no condition reaches Moderate')
 
 
-class RoundingTests(TestCase):
-    """Readings are classified as shown on screen (0.1 mph, 0.01 in/hr)."""
+class RawReadingTests(TestCase):
+    def test_readings_are_not_rounded_before_classification(self):
+        for wind, rain, snow, expected in [
+            (24.99, 0, 0, L), (0, 1.001, 0, N),
+            (0, 0, 3.01, N), (0, 0.249, 0, M),
+        ]:
+            with self.subTest(wind=wind, rain=rain, snow=snow):
+                self.assertEqual(assess(wind, rain, snow, 0).level, expected)
 
-    def test_float_noise_does_not_decide(self):
-        self.assertEqual(assess(0, 0.07 + 0.03, 0, 0).level, M)   # 0.0999... in binary
-
-    def test_a_reading_shown_as_35_0_is_high(self):
-        result = assess(34.96, 0, 0, 0)
-        self.assertEqual(result.level, H)
-        self.assertEqual(result.reason, 'High: wind 35.0 mph')
+    def test_reasons_keep_enough_precision_to_explain_the_band(self):
+        for readings, expected in [
+            ((34.96, 0, 0), 'Moderate: wind 34.96 mph'),
+            ((0, 1.001, 0), 'No Travel: rain 1.001 in/hr'),
+            ((0, 0.249, 0), 'Moderate: rain 0.249 in/hr'),
+            ((0, 0, 3.01), 'No Travel: snow 3.01 in/hr'),
+        ]:
+            with self.subTest(readings=readings):
+                self.assertEqual(assess(*readings, 0).reason, expected)
