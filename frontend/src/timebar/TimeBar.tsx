@@ -68,6 +68,8 @@ export default function TimeBar({ route, destination, departure, loadLb, hour, o
         truck.kind === 'driving' ? `truck at mile ${Math.round(truck.mile).toLocaleString('en-US')}`
           : truck.kind === 'stopped' ? `${stopName(truck.stop)} at mile ${Math.round(truck.mile)}, until ${at(truck.until, truck.stop.time_zone)}`
             : hour - end < 0.05 ? `arrived in ${destination.split(',')[0]}` : `arrived ${at(route.arrival, route.arrival_time_zone)}: forecast only from here`}
+      {/* a trip longer than the 48-h forecast: at the end of the slider the truck is still on the road */}
+      {end > SLIDER_HOURS && hour >= SLIDER_HOURS - 0.05 && ` · forecast ends here, the trip goes on: arrives ${at(route.arrival, route.arrival_time_zone)}`}
     </Typography>
   )
 
