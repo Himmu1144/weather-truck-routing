@@ -117,15 +117,15 @@ export default function TripMap({ plan, selected, onSelect, padding }: Props) {
     markers.current.forEach(marker => marker.remove())
     markers.current = []
     if (!plan || !route) return
-    const add = (el: HTMLElement, at: [number, number], anchor: 'center' | 'left' = 'center') =>
+    const add = (el: HTMLElement, at: [number, number], anchor: 'center' | 'left' | 'bottom' = 'center') =>
       markers.current.push(new Marker({ element: el, anchor }).setLngLat(at).addTo(m))
     add(pin(plan.trip.origin.label.split(',')[0]), [plan.trip.origin.lon, plan.trip.origin.lat], 'left')
     add(pin(plan.trip.destination.label.split(',')[0]), [plan.trip.destination.lon, plan.trip.destination.lat], 'left')
-    route.rest_stops.forEach(s => add(restStop(s), [s.lon, s.lat]))
     plan.routes.forEach(r => add(
       routeLabel(r, duration(r.travel_seconds), r.id === route.id, () => select(r.id)),
-      pointAt(r, labelMile(r, plan.routes.filter(o => o !== r))),
+      pointAt(r, labelMile(r, plan.routes.filter(o => o !== r), r === route ? route.rest_stops.map(s => s.mile) : [])), 'bottom', // above the line, pointer on it
     ))
+    route.rest_stops.forEach(s => add(restStop(s), [s.lon, s.lat])) // added last: always on top of a label
   }, [ready, plan, selected])
 
   if (!supported) {

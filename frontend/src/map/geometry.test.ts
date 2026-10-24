@@ -42,4 +42,10 @@ describe('map geometry', () => {
     const a = road('A'), b = road('B', 40, mile => (mile <= 50 ? 40 : 40 + (mile - 50) / 50))
     expect(labelMile(b, [a])).toBeGreaterThanOrEqual(65)
   })
+
+  it('keeps a label off the rest stops', () => {
+    const a = road('A'), b = road('B', 40, mile => (mile <= 50 ? 40 : 40 + (mile - 50) / 50))
+    const best = labelMile(b, [a])
+    expect(Math.abs(labelMile(b, [a], [best]) - best)).toBeGreaterThanOrEqual(6)
+  })
 })

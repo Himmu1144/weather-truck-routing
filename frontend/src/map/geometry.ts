@@ -46,13 +46,16 @@ export function checkpointFeatures(route: Route): { type: 'FeatureCollection'; f
   }
 }
 
-/** Where to put a route's label: the mile, between 30% and 70% of the way, that is furthest from the other routes. */
-export function labelMile(route: Route, others: Route[]): number {
+/** Where to put a route's label: the mile, between 30% and 70% of the way, that is furthest from the
+ *  other routes and not on top of a rest stop (`avoid`, in miles). */
+export function labelMile(route: Route, others: Route[], avoid: number[] = []): number {
   const near = (p: Position) => Math.min(Infinity, ...others.flatMap(o => o.line.filter((_, i) => i % 4 === 0)
     .map(([lon, lat]) => Math.hypot((lon - p[0]) * Math.cos((lat * Math.PI) / 180), lat - p[1]))))
   let best = route.distance_mi / 2, bestGap = -1
   for (let f = 0.3; f <= 0.7001; f += 0.05) {
-    const mile = route.distance_mi * f, gap = near(pointAt(route, mile))
+    const mile = route.distance_mi * f
+    if (avoid.some(a => Math.abs(a - mile) < route.distance_mi * 0.06)) continue
+    const gap = near(pointAt(route, mile))
     if (gap > bestGap) { bestGap = gap; best = mile }
   }
   return best
