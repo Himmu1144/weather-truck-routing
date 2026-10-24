@@ -156,7 +156,7 @@ def _decode_polyline6(encoded):
 
 def _osrm(points, alternatives):
     coordinates = ';'.join(f'{lon},{lat}' for lon, lat in points)
-    params = {'overview': 'full', 'geometries': 'geojson', 'annotations': 'distance,duration', 'steps': 'true',
+    params = {'overview': 'full', 'geometries': 'polyline6', 'annotations': 'distance,duration', 'steps': 'true',
               'alternatives': '3' if alternatives else 'false'}
     for server in settings.OSRM_SERVERS:
         try:
@@ -174,7 +174,7 @@ def _osrm(points, alternatives):
 
 def _osrm_route(route):
     cap = settings.TRUCK_TOP_SPEED_KMH * 1000 / 3600    # metres per second
-    line = [tuple(point) for point in route['geometry']['coordinates']]
+    line = _decode_polyline6(route['geometry'])
     miles, seconds, roads = [0.0], [0.0], Counter()
     for leg in route['legs']:
         annotation = leg['annotation']

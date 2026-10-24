@@ -1,8 +1,9 @@
 """Three route options a dispatcher would actually consider.
 
 The router's own alternatives come first. If fewer than three survive, more are found
-by routing through a point to either side of the fastest route's middle, at 15% and 25%
-of the trip's straight-line distance (kept between 30 and 200 miles). Every option,
+by routing through a point to either side of the fastest route's middle, at 15% of the
+trip's straight-line distance, then 25% only if still short (kept between 30 and 200
+miles): both distances often give the same road, so the second round is usually saved. Every option,
 the router's or ours, must:
   - take at most 25% longer than the fastest,
   - share at most 70% of its length with each option already kept (90% for the
@@ -43,8 +44,10 @@ def route_options(origin, destination, load_lb):
         if len(kept) < WANTED and _problem(route, fastest, kept, MAX_SHARED_ROUTER, detour=False) is None:
             kept.append(route)
 
-    if len(kept) < WANTED:
-        for route in _detours(origin, destination, fastest, load_lb):
+    for share in OFFSET_SHARES:
+        if len(kept) == WANTED:
+            break
+        for route in _detours(origin, destination, fastest, load_lb, share):
             if len(kept) < WANTED and _problem(route, fastest, kept, MAX_SHARED, detour=True) is None:
                 kept.append(route)
 
@@ -56,13 +59,10 @@ def route_options(origin, destination, load_lb):
     return Options(kept, note)
 
 
-def _detours(origin, destination, fastest, load_lb):
+def _detours(origin, destination, fastest, load_lb, share):
     middle = point_at(fastest.line, fastest.miles, fastest.distance_miles / 2)
-    straight = haversine_miles(origin, destination)
-    vias = []
-    for share in OFFSET_SHARES:
-        distance = min(max(straight * share, MIN_OFFSET_MILES), MAX_OFFSET_MILES)
-        vias += [offset(middle, destination, distance, side) for side in (1, -1)]
+    distance = min(max(haversine_miles(origin, destination) * share, MIN_OFFSET_MILES), MAX_OFFSET_MILES)
+    vias = [offset(middle, destination, distance, side) for side in (1, -1)]
 
     def attempt(via):
         try:

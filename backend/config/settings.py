@@ -90,7 +90,7 @@ OSRM_SERVERS = os.environ.get(
     'OSRM_SERVERS',
     'https://router.project-osrm.org,https://routing.openstreetmap.de/routed-car',
 ).split(',')
-ROUTING_TIMEOUT = (5, 15)   # seconds to connect, seconds to answer
+ROUTING_TIMEOUT = (5, 10)   # seconds to connect, seconds to answer; a stalled server gives way to the next
 ROUTING_USER_AGENT = 'weather-aware-truck-routing (take-home project)'
 ROUTE_CACHE_SECONDS = 24 * 60 * 60
 

@@ -46,7 +46,7 @@ def response(status=200, body=None):
 def osrm_body(seconds_per_segment=60):
     # three points about 6.7 and 6.7 km apart (~4.2 mi each)
     return {'code': 'Ok', 'routes': [{
-        'geometry': {'coordinates': [[-96.8, 32.78], [-96.87, 32.78], [-96.94, 32.78]]},
+        'geometry': encode_polyline6([(-96.8, 32.78), (-96.87, 32.78), (-96.94, 32.78)]),
         'legs': [{'annotation': {'distance': [6700, 6700], 'duration': [seconds_per_segment] * 2},
                   'steps': [{'ref': 'I 30', 'name': 'Tom Landry Freeway', 'distance': 13400}]}],
     }]}
