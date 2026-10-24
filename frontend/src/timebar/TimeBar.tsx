@@ -59,7 +59,8 @@ export default function TimeBar({ route, destination, departure, loadLb, hour, o
     { hour: 0, text: 'Depart', trip: true },
     ...(end <= SLIDER_HOURS ? [{ hour: end, text: 'Arrive', trip: true }] : []),
     ...midnights(departure, route.checkpoints[0].time_zone).filter(m => Math.abs(m.hour - end) > 3 && m.hour > 2).map(m => ({ hour: m.hour, text: m.day, trip: false })),
-    ...(Math.abs(end - SLIDER_HOURS) > 3 ? [{ hour: SLIDER_HOURS, text: '+48 h', trip: false }] : []),
+    // past the end the trip's own "arrives +N h" label takes that corner
+    ...(end < SLIDER_HOURS - 3 ? [{ hour: SLIDER_HOURS, text: '+48 h', trip: false }] : []),
   ]
   const note = (
     <Typography variant="caption" component="p" sx={{ fontSize: 11.5 }}>
