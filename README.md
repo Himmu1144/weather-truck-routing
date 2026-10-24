@@ -4,9 +4,10 @@ Pick the safest truck route, judged by the weather **at the hour the truck reach
 
 **[Live app](https://weather-truck-routing-ashy.vercel.app)** · **[Video walkthrough](https://www.loom.com/share/bab76d77d2a248faa9c6b97733fd833f)** · React + Django · try a sample trip
 
-![Los Angeles to Chicago: three routes, the recommendation and why, rest stops, and the weather heatmap 20 hours after departure](docs/desktop.png)
-
-<p align="center"><img src="docs/phone.png" width="280" alt="On a phone: the map, the compact slider and the plan in a bottom sheet"></p>
+<p align="center">
+  <img src="docs/desktop.png" width="74%" alt="Desktop: Los Angeles to Chicago, three routes, the recommendation and why, rest stops, and the weather heatmap 20 hours after departure">
+  <img src="docs/phone.png" width="20%" alt="Phone: the same trip, with the compact slider and the plan in a bottom sheet">
+</p>
 
 ## How it meets the brief
 
