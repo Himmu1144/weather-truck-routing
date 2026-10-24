@@ -4,12 +4,12 @@ Routes are ranked in the brief's order, with No Travel added in front because th
 brief's list leaves it out and it is worse than Severe:
   0. fewest No Travel miles   1. fewest Severe miles   2. fewest High miles
   3. lowest average risk      4. shortest travel time (arrival, with rest breaks)
-The first criterion that differs decides. Values are compared as shown on screen
-(0.1 mi, 0.01 average, whole minutes), so rounding noise never decides and the
-reason never contradicts the numbers on the page.
+The first criterion that differs decides. Weather is compared at full precision,
+with a small tolerance for float noise. Travel time is compared in whole seconds.
 """
 
 from dataclasses import dataclass
+from functools import cmp_to_key
 
 from .risk import Level
 
@@ -37,7 +37,7 @@ def duration(seconds):
 
 
 def _miles(level):
-    return lambda route: round(route.exposure.miles[level], 1)
+    return lambda route: route.exposure.miles[level]
 
 
 # (what it compares, the value in full, the value alone)
@@ -45,23 +45,31 @@ CRITERIA = [
     (_miles(Level.NO_TRAVEL), lambda v: f'{v:g} mi of No Travel weather', lambda v: f'{v:g} mi'),
     (_miles(Level.SEVERE), lambda v: f'{v:g} mi of Severe weather', lambda v: f'{v:g} mi'),
     (_miles(Level.HIGH), lambda v: f'{v:g} mi of High-risk weather', lambda v: f'{v:g} mi'),
-    (lambda route: round(route.exposure.average_risk, 2), lambda v: f'an average risk of {v:.2f}', lambda v: f'{v:.2f}'),
-    (lambda route: round(route.travel_seconds / 60), lambda v: duration(v * 60), lambda v: duration(v * 60)),
+    (lambda route: route.exposure.average_risk, lambda v: f'an average risk of {v:.2f}', lambda v: f'{v:.2f}'),
+    (lambda route: round(route.travel_seconds), duration, duration),
 ]
 
 
 def _deciding(best, other):
     """The first criterion on which `best` beats `other`, or None if they tie on all."""
     for index, (value, _, _) in enumerate(CRITERIA):
-        if value(best) != value(other):
+        if abs(value(best) - value(other)) > 1e-9:
             return index
     return None
+
+
+def _compare(left, right):
+    index = _deciding(left, right)
+    if index is None:
+        return 0
+    value = CRITERIA[index][0]
+    return -1 if value(left) < value(right) else 1
 
 
 def rank(routes):
     if not routes:
         raise ValueError('No routes to rank.')
-    ordered = sorted(routes, key=lambda route: tuple(criterion[0](route) for criterion in CRITERIA))
+    ordered = sorted(routes, key=cmp_to_key(_compare))
     best = ordered[0]
 
     not_chosen = {}

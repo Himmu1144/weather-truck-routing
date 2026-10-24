@@ -1,3 +1,4 @@
+from dataclasses import replace
 from unittest import TestCase
 
 from trips.domain.exposure import Exposure
@@ -30,9 +31,38 @@ class OrderTests(TestCase):
             with self.subTest(criterion=criterion):
                 self.assertEqual(rank([worse, better]).order, ('B', 'A'))
 
-    def test_differences_too_small_to_show_do_not_decide(self):
-        # 0.04 mi of Severe rounds to 0.0 mi, so the faster route wins on time
-        self.assertEqual(rank([route('A', 20, severe=0), route('B', 10, severe=0.04)]).recommended, 'B')
+    def test_small_severe_difference_beats_travel_time(self):
+        slower = route('A', 20, severe=1.03, moderate=0.03)   # equal average risk
+        faster = route('B', 10, severe=1.04)
+        self.assertEqual(rank([faster, slower]).recommended, 'A')
+        self.assertEqual(rank([slower, faster]).recommended, 'A')
+
+    def test_all_weather_criteria_keep_their_precision(self):
+        cases = [
+            ({'no_travel': 1.03, 'severe': 0.1}, {'no_travel': 1.04}),
+            ({'severe': 1.03, 'high': 0.1}, {'severe': 1.04}),
+            ({'high': 1.03, 'moderate': 0.1}, {'high': 1.04}),
+            ({'moderate': 1.03}, {'moderate': 1.04}),
+        ]
+        for safer, worse in cases:
+            with self.subTest(safer=safer):
+                self.assertEqual(rank([route('B', 10, **worse), route('A', 20, **safer)]).recommended, 'A')
+
+    def test_float_noise_defers_to_the_next_criterion(self):
+        for level in ['no_travel', 'severe', 'high', 'moderate']:
+            with self.subTest(level=level):
+                self.assertEqual(rank([route('A', 20, **{level: 1}),
+                                       route('B', 10, **{level: 1 + 1e-10})]).recommended, 'B')
+
+    def test_travel_time_is_compared_in_seconds(self):
+        slower = replace(route('A', 10), travel_seconds=36020)
+        faster = replace(route('B', 10), travel_seconds=36010)
+        self.assertEqual(rank([slower, faster]).recommended, 'B')
+
+    def test_exact_ties_keep_input_order(self):
+        ranking = rank([route('B', 10), route('A', 10)])
+        self.assertEqual(ranking.order, ('B', 'A'))
+        self.assertEqual(ranking.not_chosen['A'], 'Ties with Route B on weather and time.')
 
 
 class ReasonTests(TestCase):
