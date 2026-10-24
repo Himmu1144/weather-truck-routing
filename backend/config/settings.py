@@ -104,6 +104,10 @@ WEATHER_BATCH = 200          # locations per request
 WEATHER_TIMEOUT = (5, 15)
 WEATHER_CACHE_SECONDS = 30 * 60
 
+# Place search: Photon (OpenStreetMap, free, no key) for addresses; towns are local.
+PHOTON_URL = os.environ.get('PHOTON_URL', 'https://photon.komoot.io/api/')
+PHOTON_TIMEOUT = (3, 4)
+
 # Cache: routes and forecasts, in memory. A trip can hold hundreds of forecast cells, far
 # over the default limit of 300 entries.
 CACHES = {

@@ -2,6 +2,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
+from .places import search_addresses, search_towns
 from .planner import plan_trip
 from .routing import NoRoute, RoutingUnavailable
 from .serializers import PlanRequestSerializer
@@ -27,6 +28,14 @@ def api_exception_handler(exc, context):
 @api_view(['GET'])
 def health(request):
     return Response({'status': 'ok'})
+
+
+@api_view(['GET'])
+def places(request):
+    """?q=den&source=towns (local, instant) or source=search (addresses, ZIP codes, ports)."""
+    query = request.query_params.get('q', '')
+    search = search_addresses if request.query_params.get('source') == 'search' else search_towns
+    return Response({'results': search(query)})
 
 
 @api_view(['POST'])
