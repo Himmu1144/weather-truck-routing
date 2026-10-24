@@ -1,17 +1,32 @@
 # Weather-Aware Truck Routing
 
-A React + Django app that recommends the safest truck route, using the weather at the hour the truck reaches each point on the road and the load it carries.
+Pick the safest truck route, judged by the weather **at the hour the truck reaches each part of the road**, and by the load it carries.
 
-**Live:** https://weather-truck-routing-ashy.vercel.app
+**[Live app](https://weather-truck-routing-ashy.vercel.app)** · React + Django · try the "LA → Chicago" sample
 
-## What it does
-- Enter origin, destination, departure time (in your own time zone) and load weight; pick weather checkpoints every 10, 25 or 50 miles.
-- Up to three routes. Each checkpoint gets the forecast for the hour the truck arrives there, classified with the brief's risk table and load rules.
-- A recommendation with the reason in plain words, every route on the map coloured by risk, checkpoint and rest-stop cards, and a timeline.
-- A weather heatmap along the corridor with a 0 to 48 h slider (hour 0 = departure). All hours are fetched once, so sliding never refetches; it is drawn on the GPU.
-- Works on phones (bottom sheet + compact slider).
+![Los Angeles to Chicago: three routes, the recommendation, rest stops and the weather heatmap 20 hours after departure](docs/desktop.png)
+
+## How it meets the brief
+
+| The brief asks for | What the app does |
+|---|---|
+| Origin, destination, departure, load | Place search (cities, addresses, ports, ZIPs); departure in your own time zone, up to 7 days ahead; cargo weight 0 to 80,000 lb |
+| 3 route options from a routing API | Valhalla truck routing, with OSRM when Valhalla refuses a long trip. Each route says which router made it |
+| Weather every 10 / 25 / 50 mi at the truck's ETA | A checkpoint at the start, every N miles and the end; each reads the forecast for the hour the truck arrives there, legal rest stops included |
+| Risk from the table and load rules | Every checkpoint is classified and names its cause ("No Travel: wind 47 mph with a 42,000 lb load (Severe at 30,000 lb or less)") |
+| Recommend the best route | The brief's order, with the reason in plain words and the time it costs |
+| Map: routes, checkpoints, risk, ETAs, summaries | Routes coloured by risk, checkpoint and rest-stop cards, route labels with time and distance, a timeline that flies the map |
+| Corridor heatmap with a 0–48 h slider | A WebGL layer drawn per pixel; all 49 hours are fetched once, so sliding never refetches (60 fps) |
+
+## Key decisions
+
+- **ETAs include legal rest breaks.** A truck can't drive 28 hours straight, so a 30-min break after 8 h of driving and 10 h off duty at the 11-h driving limit are added; otherwise the weather would be read at hours the truck isn't there. A switch turns them off and shows how much earlier non-stop would arrive.
+- **Risk follows the table exactly.** The actual reading is classified. Where two bands share an edge (25 mph, 0.25 in/hr…) the higher, safer band applies, except where the table says ">" for No Travel (rain > 1.00, snow > 3.0). Load rules are strict: exactly 30,000 or 40,000 lb doesn't escalate. Rain and snow are scored separately; steady wind is scored and gusts are shown. The worst condition sets the level.
+- **Recommendation in the brief's order, plus one rule.** Fewest Severe miles, then High miles, then lowest average risk, then shortest travel time, with one rule added first: fewest No Travel miles, so a route the rules say not to drive can never win. Miles are counted halfway to each neighbouring checkpoint; average risk is compared at the precision shown (0.01).
+- **Honest alternatives.** If the router only finds two genuinely different roads, the app shows two and says why, instead of padding with a detour no dispatcher would take.
 
 ## Run it locally
+
 No API keys needed.
 
 ```bash
@@ -22,33 +37,24 @@ python -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 # frontend (Node 20+), in another terminal
 cd frontend
-npm install && npm run dev        # http://localhost:5173, /api is proxied to :8000
+npm install && npm run dev        # http://localhost:5173 (proxies /api to :8000)
 ```
 
-Tests: `cd backend && .venv/bin/python manage.py test` (94) · `cd frontend && npm test` (79). No test calls a real API.
+**Tests:** `cd backend && .venv/bin/python manage.py test` (96) · `cd frontend && npm test` (79). No test calls a real API.
 
-## How the rules are read
-- **Risk:** the actual reading is compared with the brief's table. Where two bands share an edge (25 mph, 0.25 in/hr…) the higher, safer band applies, except where the table says ">" for No Travel (rain > 1.00, snow > 3.0). Rain and snow are scored separately; steady wind is scored, gusts are shown. The worst condition sets the level, and the app names it.
-- **Load rules:** strict ">": exactly 30,000 or 40,000 lb does not escalate. Load is cargo weight.
-- **Recommendation:** the brief's order (fewest Severe miles, fewest High miles, lowest average risk, shortest travel time), with one rule added first: fewest No Travel miles, so a route the rules say not to drive never wins. Miles are counted halfway to each neighbouring checkpoint.
-- **ETAs include rest breaks** (switchable): a 30-min break after 8 h of driving and 10 h off duty when the 11-h driving limit is reached. This is a simple model of the US hours-of-service rules, not full compliance (it doesn't know the driver's remaining hours; the 14-h and 70-h rules don't bind on a single trip).
-- **Departure:** up to 7 days ahead; checkpoints more than 72 h out are labelled long-range.
+## How it's built
 
-## Architecture
-- `backend/trips/domain/`: the rules in plain Python (risk, exposure, ranking, hours), no Django, unit-tested.
-- `backend/trips/`: routing, weather and place search clients, the planner, and a thin DRF view (`POST /api/plans/`, `GET /api/places/`).
-- `frontend/src/`: React 19 + TypeScript + MUI; MapLibre for the map; the heatmap is a small WebGL2 layer.
-- Hosting: React on Vercel; Django on Cloud Run (kept warm by a 5-minute Cloud Scheduler ping). Vercel forwards `/api/*` to Cloud Run, so there is one origin and no CORS.
+- `backend/trips/domain/`: the rules in plain Python (risk, exposure, ranking, hours of service), no Django, unit-tested.
+- `backend/trips/`: routing, weather and place-search clients, the planner, and a thin DRF view (`POST /api/plans/`, `GET /api/places/`).
+- `frontend/src/`: React 19, TypeScript and MUI; MapLibre for the map; the heatmap is a small WebGL2 layer. Works on phones (bottom sheet and compact slider).
+- **Hosting:** React on Vercel, Django on Cloud Run (kept warm by a 5-minute Cloud Scheduler ping). Vercel forwards `/api/*` to Cloud Run, so there is one origin and no CORS.
 
-## Services and limits
-| Need | Service (free, no key) | Limit / note |
-|---|---|---|
-| Truck routes | Valhalla (OSM public server), truck profile | Refuses very long trips; then OSRM (car roads) is used, and each route says which router made it |
-| Alternatives | Router alternatives + one side detour if at most ~25% slower and clearly different | Some trips only have two sensible roads; the app shows two and says why |
-| Weather | Open-Meteo | Free tier is rate-limited per IP; the app counts down and retries when busy, and says so plainly when the daily limit is reached |
-| Places | Photon + a bundled US town list | Finds cities, ports, ZIPs; not every house-number address |
+## Limits
 
-Contiguous US only. The map needs WebGL2.
+- **Free services.** Valhalla's public server refuses very long trips (then OSRM, car roads, is used and labelled). Open-Meteo's free tier is rate-limited per IP: the app counts down and retries when busy, and says so plainly when the daily limit is reached.
+- **Rest model, not full compliance.** It models the 30-min and 11-h rules from the start of the trip; it doesn't know the driver's remaining hours (the 14-h and 70-h rules don't bind on a single trip).
+- Contiguous US only. Forecasts more than 72 h out are labelled long-range. The map needs WebGL2.
 
 ## In production I would
-Use a commercial truck router (bridge heights, hazmat), a paid or self-hosted Open-Meteo and Photon, a shared cache (Redis) instead of per-instance memory, and start rest breaks from the driver's actual logbook hours.
+
+Use a commercial truck router (bridge heights, hazmat), a paid or self-hosted Open-Meteo and Photon, a shared cache (Redis) instead of per-instance memory, and start rest breaks from the driver's logbook hours.
