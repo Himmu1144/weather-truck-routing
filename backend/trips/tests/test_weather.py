@@ -95,3 +95,13 @@ class WeatherTests(SimpleTestCase):
         with self.assertRaises(WeatherUnavailable) as raised:
             readings([((-87.63, 41.88), T0)])
         self.assertFalse(raised.exception.busy)
+
+    def test_a_used_up_daily_limit_is_not_called_busy(self):
+        # Same 429 as the minute limit, but waiting 30 s won't clear it.
+        refused = MagicMock(status_code=429)
+        refused.json.return_value = {'error': True, 'reason': 'Daily API request limit exceeded. Please try again tomorrow.'}
+        self.get.return_value = refused
+        with self.assertRaises(WeatherUnavailable) as raised:
+            readings([((-87.63, 41.88), T0)])
+        self.assertFalse(raised.exception.busy)
+        self.assertIn('daily limit', str(raised.exception))

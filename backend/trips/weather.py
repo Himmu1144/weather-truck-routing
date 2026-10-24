@@ -110,6 +110,14 @@ def _fetch(cells, first, last):
     except requests.RequestException as error:
         raise WeatherUnavailable('The weather service is not responding.') from error
     if response.status_code == 429:
+        # The per-minute limit clears in a minute; the hourly and daily ones don't, so waiting won't help.
+        try:
+            reason = str(response.json().get('reason', ''))
+        except (ValueError, AttributeError):
+            reason = ''
+        if 'daily' in reason.lower() or 'hourly' in reason.lower():
+            raise WeatherUnavailable(f'The free weather service has reached its {"daily" if "daily" in reason.lower() else "hourly"} '
+                                     'limit for this server. Try again later.')
         raise WeatherUnavailable('The free weather service is busy. Try again in a minute.', busy=True)
     if response.status_code != 200:
         raise WeatherUnavailable('The weather service could not give a forecast for these dates.')
