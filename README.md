@@ -6,6 +6,8 @@ Pick the safest truck route, judged by the weather **at the hour the truck reach
 
 ![Los Angeles to Chicago: three routes, the recommendation, rest stops and the weather heatmap 20 hours after departure](docs/desktop.png)
 
+<p align="center"><img src="docs/phone.png" width="280" alt="On a phone: the map, the compact slider and the plan in a bottom sheet"></p>
+
 ## How it meets the brief
 
 | The brief asks for | What the app does |
