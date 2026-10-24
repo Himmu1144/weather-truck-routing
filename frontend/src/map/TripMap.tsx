@@ -11,6 +11,7 @@ import './map.css'
 import { heatLayer, type HeatLayer, type HeatView } from '../heat/layer'
 import type { HeatState } from '../heat/useHeatWeather'
 import CheckpointCard from './CheckpointCard'
+import RestStopCard from './RestStopCard'
 import { pin, restStop, routeLabel } from './markers'
 
 // MapLibre finds its worker next to its own file; once bundled it can't, so it is told where Vite put it.
@@ -37,12 +38,12 @@ interface Props {
   heat: HeatState
   hour: number // hours after departure shown by the heatmap
   view: HeatView
-  truck: [number, number] | null // where the truck is at that hour, on the selected route
+  truck: { at: [number, number]; note: string | null } | null // where the truck is at that hour, and why it stands still
   padding: PaddingOptions // the part of the map the panel covers
 }
 
 // The open card: which checkpoint, whether it stays open, and where on screen (kept up to date as the map moves).
-type Card = { route: Route['id']; index: number; pinned: boolean; lon: number; lat: number; x: number; y: number }
+type Card = { kind: 'checkpoint' | 'rest'; route: Route['id']; index: number; pinned: boolean; lon: number; lat: number; x: number; y: number }
 
 function webgl(): boolean {
   try {
@@ -67,12 +68,14 @@ export default function TripMap({ plan, selected, onSelect, focus, heat, hour, v
   const select = useEffectEvent((id: Route['id']) => onSelect(id))
   // The checkpoint card: shown on hover, pinned by a click or tap. It follows the map as it moves.
   const [card, setCard] = useState<Card | null>(null)
-  const showCard = useEffectEvent((index: number, pinned: boolean) => {
-    const m = map.current, c = plan?.routes.find(r => r.id === selected)?.checkpoints[index]
-    if (!m || !c || !selected) return
-    const { x, y } = m.project([c.lon, c.lat])
-    setCard(open => (open?.pinned && !pinned && open.route === selected ? open : { route: selected, index, pinned, lon: c.lon, lat: c.lat, x, y }))
+  const showCard = useEffectEvent((kind: Card['kind'], index: number, pinned: boolean) => {
+    const m = map.current, r = plan?.routes.find(r => r.id === selected)
+    const point = kind === 'checkpoint' ? r?.checkpoints[index] : r?.rest_stops[index]
+    if (!m || !point || !selected) return
+    const { x, y } = m.project([point.lon, point.lat])
+    setCard(open => (open?.pinned && !pinned && open.route === selected ? open : { kind, route: selected, index, pinned, lon: point.lon, lat: point.lat, x, y }))
   })
+  const hideCard = useEffectEvent(() => setCard(c => (c?.pinned ? c : null)))
 
   useEffect(() => {
     if (!supported || !box.current) return
@@ -103,6 +106,8 @@ export default function TripMap({ plan, selected, onSelect, focus, heat, hour, v
         'circle-stroke-color': ['case', ['boolean', ['feature-state', 'hover'], false], ink.main, ['==', ['get', 'level'], 'low'], ink.main, '#fff'] as unknown as string,
         'circle-stroke-width': ['case', ['boolean', ['feature-state', 'hover'], false], 3, ['==', ['get', 'level'], 'low'], 0, 2] as unknown as number,
       } })
+      // Dots are drawn small; this invisible wider circle is what the mouse or a finger has to hit.
+      m.addLayer({ id: 'checkpoint-hit', type: 'circle', source: 'checkpoints', paint: { 'circle-radius': 11, 'circle-opacity': 0 } })
       // A grey route is picked by clicking it; a wide invisible line makes it easy to hit.
       m.addLayer({ id: 'route-hit', type: 'line', source: 'routes', paint: { 'line-color': '#000', 'line-opacity': 0, 'line-width': 16 } }, labels)
       m.on('click', 'route-hit', e => { const id = e.features?.[0]?.properties?.id; if (id) select(id) })
@@ -112,16 +117,16 @@ export default function TripMap({ plan, selected, onSelect, focus, heat, hour, v
         hovered = index
         if (index !== null) m.setFeatureState({ source: 'checkpoints', id: index }, { hover: true })
       }
-      m.on('mousemove', 'checkpoints', e => {
+      m.on('mousemove', 'checkpoint-hit', e => {
         const index = e.features?.[0]?.properties?.index as number | undefined
         if (index === undefined) return
-        hover(index); m.getCanvas().style.cursor = 'pointer'; showCard(index, false)
+        hover(index); m.getCanvas().style.cursor = 'pointer'; showCard('checkpoint', index, false)
       })
-      m.on('mouseleave', 'checkpoints', () => { hover(null); m.getCanvas().style.cursor = ''; setCard(c => (c?.pinned ? c : null)) })
+      m.on('mouseleave', 'checkpoint-hit', () => { hover(null); m.getCanvas().style.cursor = ''; hideCard() })
       m.on('click', e => {
         // a click or tap on a checkpoint pins its card; anywhere else closes it
-        const hit = m.queryRenderedFeatures(e.point, { layers: ['checkpoints'] })[0]
-        if (hit) showCard(hit.properties.index as number, true)
+        const hit = m.queryRenderedFeatures(e.point, { layers: ['checkpoint-hit'] })[0]
+        if (hit) showCard('checkpoint', hit.properties.index as number, true)
         else setCard(null)
       })
       m.on('move', () => setCard(c => (c ? { ...c, ...m.project([c.lon, c.lat]) } : c)))
@@ -161,7 +166,7 @@ export default function TripMap({ plan, selected, onSelect, focus, heat, hour, v
   useEffect(() => { heatRef.current?.setHour(hour) }, [hour, grid])
   useEffect(() => { heatRef.current?.setView(view) }, [view, grid])
 
-  // The truck dot moves with the slider; it is hidden before a plan and after arrival.
+  // The truck dot moves with the slider, with a note while it is stopped or has arrived.
   useEffect(() => {
     const m = map.current
     if (!ready || !m) return
@@ -169,8 +174,10 @@ export default function TripMap({ plan, selected, onSelect, focus, heat, hour, v
     if (!truckRef.current) {
       const el = document.createElement('div')
       el.className = 'tw-truck'
-      truckRef.current = new Marker({ element: el }).setLngLat(truck).addTo(m)
-    } else truckRef.current.setLngLat(truck)
+      el.innerHTML = '<span class="tw-truck-note"></span>'
+      truckRef.current = new Marker({ element: el }).setLngLat(truck.at).addTo(m)
+    } else truckRef.current.setLngLat(truck.at)
+    truckRef.current.getElement().querySelector('.tw-truck-note')!.textContent = truck.note ?? ''
   }, [ready, truck])
 
   // The selected route: in colour on top, its checkpoints and rest stops shown; the others grey.
@@ -197,7 +204,7 @@ export default function TripMap({ plan, selected, onSelect, focus, heat, hour, v
       routeLabel(r, duration(r.travel_seconds), r.id === route.id, () => select(r.id)),
       pointAt(r, labelMile(r, plan.routes.filter(o => o !== r), r === route ? route.rest_stops.map(s => s.mile) : [])), 'bottom', // above the line, pointer on it
     ))
-    route.rest_stops.forEach(s => add(restStop(s), [s.lon, s.lat])) // added last: always on top of a label
+    route.rest_stops.forEach((s, i) => add(restStop(s, { hover: inside => (inside ? showCard('rest', i, false) : hideCard()), pin: () => showCard('rest', i, true) }), [s.lon, s.lat])) // added last: on top of labels
   }, [ready, plan, selected])
 
   // A timeline row was clicked: fly there, and open the checkpoint's card if it is one.
@@ -206,11 +213,15 @@ export default function TripMap({ plan, selected, onSelect, focus, heat, hour, v
     if (!ready || !m || !focus || !route) return
     m.flyTo({ center: pointAt(route, focus.mile), zoom: Math.max(m.getZoom(), 7), duration: 1200 })
     const index = route.checkpoints.findIndex(c => Math.abs(c.mile - focus.mile) < 0.01)
-    if (index >= 0) m.once('moveend', () => showCard(index, true))
+    const rest = route.rest_stops.findIndex(s => Math.abs(s.mile - focus.mile) < 0.01)
+    if (index >= 0) m.once('moveend', () => showCard('checkpoint', index, true))
+    else if (rest >= 0) m.once('moveend', () => showCard('rest', rest, true))
   }, [ready, focus, plan, selected])
 
   const route = plan?.routes.find(r => r.id === selected)
-  const checkpoint = card && route && card.route === route.id ? route.checkpoints[card.index] : undefined
+  const open = card && route && card.route === route.id ? card : null
+  const checkpoint = open?.kind === 'checkpoint' ? route!.checkpoints[open.index] : undefined
+  const stop = open?.kind === 'rest' ? route!.rest_stops[open.index] : undefined
 
   if (!supported) {
     return (
@@ -226,9 +237,8 @@ export default function TripMap({ plan, selected, onSelect, focus, heat, hour, v
   return (
     <Box sx={{ position: 'absolute', inset: 0 }} data-basemap={basemap}>
       <Box ref={box} sx={{ width: 1, height: 1 }} />
-      {card && checkpoint && (
-        <CheckpointCard checkpoint={checkpoint} x={card.x} y={card.y} onClose={card.pinned ? () => setCard(null) : undefined} />
-      )}
+      {open && checkpoint && <CheckpointCard checkpoint={checkpoint} x={open.x} y={open.y} onClose={open.pinned ? () => setCard(null) : undefined} />}
+      {open && stop && <RestStopCard stop={stop} x={open.x} y={open.y} onClose={open.pinned ? () => setCard(null) : undefined} />}
       {basemap !== 'ready' && (
         <Typography role="status" variant="caption" sx={{
           position: 'absolute', top: 16, left: `calc(${padding.left}px + (100% - ${padding.left}px) / 2)`, transform: 'translateX(-50%)',

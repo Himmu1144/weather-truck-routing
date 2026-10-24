@@ -1,4 +1,4 @@
-import { Box, ButtonBase, Typography } from '@mui/material'
+import { Box, ButtonBase, Switch, Typography } from '@mui/material'
 import { memo } from 'react'
 import type { Level, Plan, Route } from '../api/types'
 import { at, duration, extra, localTime, miles } from '../lib/format'
@@ -13,6 +13,9 @@ interface Props {
   selected: Route['id']
   onSelect: (id: Route['id']) => void
   onFocus?: (mile: number) => void // show this mile of the selected route on the map
+  onRestBreaks?: (on: boolean) => void // plan the same trip again with legal rest breaks on or off
+  twin?: Plan | null // the same trip planned the other way, for the comparison line
+  updating?: boolean // the twin is being planned
 }
 
 const worst = (route: Route): Level | undefined =>
@@ -24,7 +27,7 @@ const exposureText = (route: Route) => {
 const routerTag = (route: Route) => (route.router === 'valhalla' ? 'Truck route' : 'Car roads')
 
 /** Memoised: the slider moves 60 times a second and the panel has no reason to redraw. */
-export default memo(function Results({ plan, selected, onSelect, onFocus }: Props) {
+export default memo(function Results({ plan, selected, onSelect, onFocus, onRestBreaks, twin, updating }: Props) {
   const recommended = plan.routes.find(r => r.id === plan.recommendation.route_id)!
   const route = plan.routes.find(r => r.id === selected)!
   const fastest = Math.min(...plan.routes.map(r => r.travel_seconds))
@@ -41,6 +44,16 @@ export default memo(function Results({ plan, selected, onSelect, onFocus }: Prop
         <Typography variant="caption" component="p" sx={{ mt: 0.4, fontSize: 12.5 }}>
           Leaves {at(trip.departure, recommended.checkpoints[0].time_zone)} · {trip.load_lb.toLocaleString('en-US')} lb · weather every {trip.interval_mi} mi
         </Typography>
+        {onRestBreaks && (
+          <Box component="label" sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, ml: -1, cursor: 'pointer', width: 'fit-content' }}>
+            <Switch size="small" checked={trip.rest_breaks} disabled={updating} onChange={e => onRestBreaks(e.target.checked)}
+              slotProps={{ input: { 'aria-label': 'Legal rest breaks' } }}
+              sx={{ '& .Mui-checked + .MuiSwitch-track': { bgcolor: `${ink.main} !important`, opacity: '1 !important' }, '& .Mui-checked .MuiSwitch-thumb': { color: '#fff' } }} />
+            <Typography variant="caption" sx={{ fontSize: 12.5, color: ink[2] }}>
+              {updating ? 'Planning again…' : trip.rest_breaks ? 'Legal rest breaks included' : 'Non-stop: no rest breaks'}
+            </Typography>
+          </Box>
+        )}
       </Box>
 
       {/* The answer first */}
@@ -50,10 +63,11 @@ export default memo(function Results({ plan, selected, onSelect, onFocus }: Prop
         via {recommended.via} <Tag>{routerTag(recommended)}</Tag>
       </Typography>
       <Box sx={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr .8fr', gap: 1.5, mb: 2.25 }}>
-        <Stat label="Arrives" value={arrives.time} note={`${arrives.zone} · with rest stops`} />
+        <Stat label="Arrives" value={arrives.time} note={`${arrives.zone} · ${trip.rest_breaks ? 'with rest stops' : 'non-stop, no rest breaks'}`} />
         <Stat label="On the road" value={duration(recommended.travel_seconds)} note={`${duration(recommended.drive_seconds)} driving`} />
         <Stat label="Distance" value={miles(recommended.distance_mi)} />
       </Box>
+      {twin && <TwinLine plan={plan} twin={twin} />}
       <Typography variant="body2" sx={{ color: ink[2], mb: 2, textWrap: 'pretty' }}>{plan.recommendation.reason}</Typography>
       {plan.recommendation.warning && <Note>{plan.recommendation.warning}</Note>}
       <RiskStrip route={recommended} />
@@ -132,9 +146,9 @@ function TimelineRow({ row, rail, last, plan, onFocus }: { row: Row; rail: strin
       title = <Light>{row.count} checkpoint{row.count > 1 ? 's' : ''} Low · mile {Math.round(row.mile)}–{Math.round(row.to)}</Light>
       break
     case 'rest':
-      title = <>{row.stop.kind === 'rest' ? '10 h rest' : '30 min break'} <Light>· mile {Math.round(row.mile)}</Light></>
+      title = <>{row.stop.kind === 'rest' ? '10 h off duty' : '30 min break'} <Light>· mile {Math.round(row.mile)}</Light></>
       when = at(row.stop.starts, row.stop.time_zone)
-      meta = row.stop.kind === 'rest' ? 'Required after 11 h of driving' : 'Required after 8 h of driving'
+      meta = row.stop.kind === 'rest' ? 'The 11-h daily driving limit was reached' : 'Required after 8 h of driving'
       break
     case 'checkpoint': {
       const c = row.checkpoint, [level, ...cause] = c.reason.split(': ')
@@ -158,6 +172,23 @@ function TimelineRow({ row, rail, last, plan, onFocus }: { row: Row; rail: strin
         {meta && <Typography variant="caption" sx={{ gridColumn: '2 / 4' }}>{meta}</Typography>}
       </ButtonBase>
     </Box>
+  )
+}
+
+/** The same trip planned the other way: how much sooner or later, and whether the pick changes. */
+function TwinLine({ plan, twin }: { plan: Plan; twin: Plan }) {
+  const id = plan.recommendation.route_id
+  const here = plan.routes.find(r => r.id === id)!, there = twin.routes.find(r => r.id === id)
+  if (!there) return null
+  const arrives = localTime(there.arrival, there.arrival_time_zone), gap = Math.abs(there.travel_seconds - here.travel_seconds)
+  const other = twin.recommendation.route_id
+  return (
+    <Typography variant="body2" sx={{ color: ink[2], mb: 1.5, fontSize: 12.5 }}>
+      {plan.trip.rest_breaks
+        ? <>Non-stop, Route {id} would arrive {arrives.time} {arrives.zone}, {duration(gap)} earlier, but not legally.</>
+        : <>With legal rest breaks, Route {id} arrives {arrives.time} {arrives.zone}, {duration(gap)} later.</>}
+      {other !== id && <> That plan recommends Route {other}.</>}
+    </Typography>
   )
 }
 

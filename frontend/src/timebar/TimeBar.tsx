@@ -3,10 +3,10 @@ import { useEffect, useRef, useState } from 'react'
 import type { Route } from '../api/types'
 import type { HeatView } from '../heat/layer'
 import type { HeatState } from '../heat/useHeatWeather'
-import { localTime } from '../lib/format'
+import { at, localTime } from '../lib/format'
 import { ease, hairline, ink, LEVEL_NAMES, LEVELS, RISK } from '../theme'
 import './timebar.css'
-import { levelsInTime, midnights, SLIDER_HOURS, truckMile, zoneAt } from './trip'
+import { levelsInTime, midnights, SLIDER_HOURS, stopName, truckState, zoneAt } from './trip'
 
 const PLAY_HOURS_PER_SECOND = 3
 const SCALES: Record<HeatView, string> = {
@@ -15,6 +15,7 @@ const SCALES: Record<HeatView, string> = {
 
 interface Props {
   route: Route
+  destination: string
   departure: string
   loadLb: number
   hour: number
@@ -27,8 +28,11 @@ interface Props {
 
 /** The forecast slider: 0 to 48 h from departure, the trip's span marked on it in the colours of
  *  the weather the truck meets, the clock in the local time of wherever the truck is. */
-export default function TimeBar({ route, departure, loadLb, hour, onHour, view, onView, heat, onRetryHeat }: Props) {
+export default function TimeBar({ route, destination, departure, loadLb, hour, onHour, view, onView, heat, onRetryHeat }: Props) {
   const [playing, setPlaying] = useState(false)
+  const end = route.travel_seconds / 3600
+  // Play plays the trip: it stops at arrival. Started after arrival, it plays the rest of the forecast.
+  const stopAt = useRef(SLIDER_HOURS)
   const latest = useRef(hour)
   useEffect(() => { latest.current = hour }, [hour])
 
@@ -38,7 +42,7 @@ export default function TimeBar({ route, departure, loadLb, hour, onHour, view, 
     const step = (now: number) => {
       const next = latest.current + ((now - last) / 1000) * PLAY_HOURS_PER_SECOND
       last = now
-      if (next >= SLIDER_HOURS) { onHour(SLIDER_HOURS); setPlaying(false); return }
+      if (next >= stopAt.current) { onHour(stopAt.current); setPlaying(false); return }
       onHour(next)
       frame = requestAnimationFrame(step)
     }
@@ -46,10 +50,9 @@ export default function TimeBar({ route, departure, loadLb, hour, onHour, view, 
     return () => cancelAnimationFrame(frame)
   }, [playing, onHour])
 
-  const end = route.travel_seconds / 3600
   const zone = zoneAt(route, hour)
   const clock = localTime(new Date(Date.parse(departure) + hour * 3.6e6).toISOString(), zone)
-  const mile = truckMile(route, hour)
+  const truck = truckState(route, hour)
   const pct = (h: number) => `${(Math.min(h, SLIDER_HOURS) / SLIDER_HOURS) * 100}%`
   const ticks = [
     { hour: 0, text: 'Depart', trip: true },
@@ -64,16 +67,26 @@ export default function TimeBar({ route, departure, loadLb, hour, onHour, view, 
       outline: `1px solid ${hairline}`, boxShadow: '0 1px 2px rgba(16,24,40,.04), 0 24px 56px -16px rgba(16,24,40,.25)',
     }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        <ButtonBase onClick={() => { if (!playing && hour >= SLIDER_HOURS) onHour(0); setPlaying(p => !p) }} aria-label={playing ? 'Pause' : 'Play'}
+        <ButtonBase onClick={() => {
+          if (!playing) {
+            const from = hour >= SLIDER_HOURS ? 0 : hour
+            if (from !== hour) onHour(from)
+            stopAt.current = from < end - 0.01 ? Math.min(end, SLIDER_HOURS) : SLIDER_HOURS
+          }
+          setPlaying(p => !p)
+        }} aria-label={playing ? 'Pause' : 'Play'}
           sx={{ width: 38, height: 38, borderRadius: '50%', bgcolor: ink.main, color: '#fff', flex: 'none', transition: `transform .3s ${ease}`, '&:hover': { transform: 'scale(1.06)' } }}>
           {playing
             ? <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden><rect x="2" y="1.5" width="2.8" height="9" rx="1" fill="currentColor" /><rect x="7.2" y="1.5" width="2.8" height="9" rx="1" fill="currentColor" /></svg>
             : <svg width="13" height="13" viewBox="0 0 12 12" aria-hidden><path d="M3 1.8v8.4c0 .5.5.8.9.5l6.6-4.2c.4-.2.4-.8 0-1L3.9 1.3c-.4-.3-.9 0-.9.5z" fill="currentColor" /></svg>}
         </ButtonBase>
-        <Box sx={{ minWidth: 160 }} aria-live="off">
+        <Box sx={{ minWidth: 160, flex: 1 }} aria-live="off">
           <Typography sx={{ fontFamily: '"Space Grotesk"', fontWeight: 500, fontSize: 19, lineHeight: 1.1 }}>{clock.time}</Typography>
           <Typography variant="caption" sx={{ fontSize: 11.5 }}>
-            {clock.zone} · +{hour.toFixed(hour % 1 ? 1 : 0)} h · {mile === null ? 'arrived' : `truck at mile ${Math.round(mile).toLocaleString('en-US')}`}
+            {clock.zone} · +{hour.toFixed(hour % 1 ? 1 : 0)} h · {
+              truck.kind === 'driving' ? `truck at mile ${Math.round(truck.mile).toLocaleString('en-US')}`
+                : truck.kind === 'stopped' ? `${stopName(truck.stop)} at mile ${Math.round(truck.mile)}, until ${at(truck.until, truck.stop.time_zone)}`
+                  : hour - end < 0.05 ? `arrived in ${destination.split(',')[0]}` : `arrived ${at(route.arrival, route.arrival_time_zone)}: forecast only from here`}
           </Typography>
         </Box>
         <Box role="tablist" aria-label="Heatmap shows" sx={{ ml: 'auto', display: 'flex', p: '3px', bgcolor: 'rgba(11,11,13,.05)', borderRadius: '10px' }}>
@@ -122,7 +135,7 @@ export default function TimeBar({ route, departure, loadLb, hour, onHour, view, 
           {heat.status === 'loading' && <Typography variant="caption" sx={{ fontSize: 11.5 }}>Loading the weather layer…</Typography>}
           {heat.status === 'failed' && (
             <>
-              <Typography variant="caption" sx={{ fontSize: 11.5, color: ink[2] }}>{heat.error.message} The plan above is unaffected.</Typography>
+              <Typography variant="caption" sx={{ fontSize: 11.5, color: ink[2] }}>{heat.error.message} The plan itself is unaffected.</Typography>
               <Button size="small" onClick={onRetryHeat} sx={{ minWidth: 0, py: 0, fontSize: 11.5 }}>Retry</Button>
             </>
           )}

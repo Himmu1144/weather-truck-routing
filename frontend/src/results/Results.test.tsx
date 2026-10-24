@@ -41,4 +41,20 @@ describe('Results', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Show mile 675 on the map' }))
     expect(onFocus).toHaveBeenCalledWith(675)
   })
+
+  it('plans the same trip again when legal rest breaks are switched off', async () => {
+    const onRestBreaks = vi.fn()
+    render(<Results plan={plan} selected="B" onSelect={vi.fn()} onRestBreaks={onRestBreaks} />)
+    expect(screen.getByText('Legal rest breaks included')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('switch', { name: 'Legal rest breaks' }))
+    expect(onRestBreaks).toHaveBeenCalledWith(false)
+  })
+
+  it('compares with the same trip planned non-stop', () => {
+    const b = plan.routes.find(r => r.id === 'B')!
+    const nonStop = { ...plan, trip: { ...plan.trip, rest_breaks: false },
+      routes: plan.routes.map(r => (r.id === 'B' ? { ...r, travel_seconds: b.drive_seconds, arrival: '2026-10-25T07:01:00Z' } : r)) }
+    render(<Results plan={plan} selected="B" onSelect={vi.fn()} twin={nonStop as Plan} />)
+    expect(screen.getByText('Non-stop, Route B would arrive Sun 1:01 AM MDT, 10 h 30 m earlier, but not legally.')).toBeInTheDocument()
+  })
 })

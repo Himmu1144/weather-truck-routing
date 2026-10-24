@@ -9,7 +9,7 @@ import TimeBar from './TimeBar'
 const plan = storm as unknown as Plan
 const route = plan.routes.find(r => r.id === 'B')!
 const bar = (props: Partial<Parameters<typeof TimeBar>[0]> = {}) => {
-  const all = { route, departure: plan.trip.departure, loadLb: 45_000, hour: 0, onHour: vi.fn(), view: 'risk' as const, onView: vi.fn(),
+  const all = { route, destination: 'Denver, CO', departure: plan.trip.departure, loadLb: 45_000, hour: 0, onHour: vi.fn(), view: 'risk' as const, onView: vi.fn(),
     heat: { status: 'loading' as const }, onRetryHeat: vi.fn(), ...props }
   render(<TimeBar {...all} />)
   return all
@@ -21,6 +21,16 @@ describe('TimeBar', () => {
     expect(screen.getByText('Sat 7:00 PM')).toBeInTheDocument()
     expect(screen.getByText(/CDT · \+11 h · truck at mile 654/)).toBeInTheDocument()
     for (const mark of ['Depart', 'Arrive', 'Sun', '+48 h']) expect(screen.getByText(mark)).toBeInTheDocument()
+  })
+
+  it('says why the truck stands still, and when it has arrived', () => {
+    bar({ hour: 12 })   // inside the 10 h stop that starts at +11.5 h (Sat 7:30 PM CDT)
+    expect(screen.getByText(/10 h off duty at mile 685, until Sun 5:30 AM CDT/)).toBeInTheDocument()
+  })
+
+  it('says the trip is over after arrival', () => {
+    bar({ hour: 40 })
+    expect(screen.getByText(/arrived Sun 11:31 AM MDT: forecast only from here/)).toBeInTheDocument()
   })
 
   it('moves the hour when the slider moves', () => {
@@ -43,7 +53,7 @@ describe('TimeBar', () => {
 
   it('offers a retry when the weather layer failed, and the plan is unaffected', async () => {
     const { onRetryHeat } = bar({ heat: { status: 'failed', error: new HeatUnavailable('The free weather service is busy.', true) } })
-    expect(screen.getByText(/busy\. The plan above is unaffected\./)).toBeInTheDocument()
+    expect(screen.getByText(/busy\. The plan itself is unaffected\./)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(onRetryHeat).toHaveBeenCalled()
   })

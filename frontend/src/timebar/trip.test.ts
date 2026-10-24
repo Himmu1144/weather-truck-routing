@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Plan } from '../api/types'
 import storm from '../test/fixtures/storm-plan.json'
-import { levelsInTime, midnights, truckMile, zoneAt } from './trip'
+import { levelsInTime, midnights, truckMile, truckState, zoneAt } from './trip'
 
 const plan = storm as unknown as Plan
 const b = plan.routes.find(r => r.id === 'B')!
@@ -20,6 +20,12 @@ describe('the trip in time', () => {
     expect(truckMile(b, restStarts + 1)).toBeCloseTo(rest.mile, 1)
     expect(truckMile(b, restStarts + 9.9)).toBeCloseTo(rest.mile, 1)
     expect(truckMile(b, restStarts + 10.5)!).toBeGreaterThan(rest.mile)
+  })
+
+  it('knows when the truck is driving, stopped for a rest, or arrived', () => {
+    expect(truckState(b, 2).kind).toBe('driving')
+    expect(truckState(b, restStarts + 5)).toMatchObject({ kind: 'stopped', stop: { kind: 'rest' }, until: '2026-10-25T10:30:00.000Z' })
+    expect(truckState(b, 40).kind).toBe('arrived')
   })
 
   it('reads the clock in the zone where the truck is', () => {

@@ -1,6 +1,6 @@
 // The trip in time: where the truck is at a given hour, what weather it meets when,
 // and where each local midnight falls on the slider.
-import type { Level, Route } from '../api/types'
+import type { Level, RestStop, Route } from '../api/types'
 
 export const SLIDER_HOURS = 48
 
@@ -27,6 +27,26 @@ export function truckMile(route: Route, hour: number): number | null {
   }
   return null
 }
+
+export type TruckState =
+  | { kind: 'driving'; mile: number }
+  | { kind: 'stopped'; mile: number; stop: RestStop; until: string } // until: ISO end of the stop
+  | { kind: 'arrived' }
+
+/** What the truck is doing `hour` hours after departure: driving, stopped for a required rest, or arrived. */
+export function truckState(route: Route, hour: number): TruckState {
+  const mile = truckMile(route, hour)
+  if (mile === null) return { kind: 'arrived' }
+  for (const stop of route.rest_stops) {
+    const from = hoursAfter(route, stop.starts)
+    if (hour >= from && hour < from + stop.minutes / 60) {
+      return { kind: 'stopped', mile, stop, until: new Date(Date.parse(stop.starts) + stop.minutes * 60_000).toISOString() }
+    }
+  }
+  return { kind: 'driving', mile }
+}
+
+export const stopName = (stop: RestStop) => (stop.kind === 'rest' ? '10 h off duty' : '30 min break')
 
 /** The time zone where the truck is at `hour`: the nearest checkpoint's, or the destination's once arrived. */
 export function zoneAt(route: Route, hour: number): string {

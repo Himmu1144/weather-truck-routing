@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api/client'
 import type { Plan, PlanRequest } from '../api/types'
 
@@ -18,13 +18,14 @@ export function usePlan() {
   const [state, setState] = useState<PlanState>({ status: 'idle' })
   const job = useRef<{ controller?: AbortController; timer?: number }>({})
 
-  function stop() {
+  // The same functions on every render, so components handed them don't redraw for nothing.
+  const stop = useCallback(() => {
     job.current.controller?.abort()
     clearTimeout(job.current.timer)
-  }
-  useEffect(() => stop, [])
+  }, [])
+  useEffect(() => stop, [stop])
 
-  function run(request: PlanRequest, attempt: number) {
+  const run = useCallback(function run(request: PlanRequest, attempt: number) {
     stop()
     const controller = (job.current.controller = new AbortController())
     setState({ status: 'planning', request, since: Date.now(), attempt })
@@ -43,11 +44,12 @@ export function usePlan() {
         }
       },
     )
-  }
+  }, [stop])
+  const start = useCallback((request: PlanRequest) => run(request, 1), [run])
 
   return {
     state,
-    start: (request: PlanRequest) => run(request, 1),
+    start,
     /** Ask again now: after a failure, or without waiting out a busy countdown. */
     retry: () => { if ('request' in state) run(state.request, state.status === 'waiting' ? state.attempt + 1 : 1) },
     /** Stop planning and go back to the form, which keeps what was typed. */

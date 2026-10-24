@@ -15,9 +15,18 @@ function element(className: string, html: string, title?: string): HTMLElement {
 export const pin = (label: string) => element('tw-pin', `<i></i><span>${escape(label)}</span>`)
 
 // A small round icon on the line: it covers no more of the route than the line's own width.
-export const restStop = (stop: RestStop) => stop.kind === 'rest'
-  ? element('tw-rest', BED, `10-hour rest, required after 11 h of driving · mile ${Math.round(stop.mile)}`)
-  : element('tw-rest', CUP, `30-minute break, required after 8 h of driving · mile ${Math.round(stop.mile)}`)
+// Hover or tap opens its card (handled by the map).
+export function restStop(stop: RestStop, on: { hover: (inside: boolean) => void; pin: () => void }): HTMLElement {
+  const el = element('tw-rest', stop.kind === 'rest' ? BED : CUP)
+  el.setAttribute('role', 'button')
+  el.setAttribute('aria-label', `${stop.kind === 'rest' ? '10 hours off duty' : '30-minute break'} at mile ${Math.round(stop.mile)}`)
+  el.addEventListener('mouseenter', () => on.hover(true))
+  el.addEventListener('mouseleave', () => on.hover(false))
+  el.addEventListener('click', e => { e.stopPropagation(); on.pin() })
+  // keep the pointer to itself, so the map doesn't open the checkpoint underneath instead
+  el.addEventListener('mousemove', e => e.stopPropagation())
+  return el
+}
 
 /** A callout that floats above its route, its pointer touching the line, so the line stays visible. */
 export function routeLabel(route: Route, duration: string, selected: boolean, onClick: () => void): HTMLElement {

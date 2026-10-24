@@ -62,6 +62,11 @@ export const theme = createTheme({
         listbox: { padding: '4px 0 8px' },
       },
     },
+    MuiTooltip: {
+      styleOverrides: {
+        tooltip: { backgroundColor: ink.main, fontSize: 12, lineHeight: 1.5, padding: '8px 11px', borderRadius: 9, maxWidth: 280 },
+      },
+    },
     MuiButton: {
       defaultProps: { disableElevation: true },
       styleOverrides: { root: { borderRadius: 13 } },

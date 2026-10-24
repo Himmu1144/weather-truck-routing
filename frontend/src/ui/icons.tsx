@@ -10,3 +10,6 @@ export const PinIcon = () => (
 export const TownIcon = () => (
   <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden><path d="M2.5 14V7l3.5-2.5L9.5 7v7m0-5h4v5M1.5 14h13M5 10h2" {...stroke} /></svg>
 )
+export const InfoIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden><circle cx="8" cy="8" r="6.25" {...stroke} /><path d="M8 7.2v3.6M8 5.1v.1" {...stroke} /></svg>
+)
