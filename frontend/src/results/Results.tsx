@@ -1,4 +1,5 @@
 import { Box, ButtonBase, Typography } from '@mui/material'
+import { memo } from 'react'
 import type { Level, Plan, Route } from '../api/types'
 import { at, duration, extra, localTime, miles } from '../lib/format'
 import { ease, hairline, ink, LEVEL_NAMES, LEVELS, RISK } from '../theme'
@@ -22,7 +23,8 @@ const exposureText = (route: Route) => {
 }
 const routerTag = (route: Route) => (route.router === 'valhalla' ? 'Truck route' : 'Car roads')
 
-export default function Results({ plan, selected, onSelect, onFocus }: Props) {
+/** Memoised: the slider moves 60 times a second and the panel has no reason to redraw. */
+export default memo(function Results({ plan, selected, onSelect, onFocus }: Props) {
   const recommended = plan.routes.find(r => r.id === plan.recommendation.route_id)!
   const route = plan.routes.find(r => r.id === selected)!
   const fastest = Math.min(...plan.routes.map(r => r.travel_seconds))
@@ -115,7 +117,7 @@ export default function Results({ plan, selected, onSelect, onFocus }: Props) {
       )}
     </Box>
   )
-}
+})
 
 function TimelineRow({ row, rail, last, plan, onFocus }: { row: Row; rail: string; last: boolean; plan: Plan; onFocus?: (mile: number) => void }) {
   let dot = ink.main, title: React.ReactNode, when = '', meta = ''

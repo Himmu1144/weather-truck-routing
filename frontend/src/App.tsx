@@ -1,8 +1,12 @@
 import { Box, Button, Stack, Typography } from '@mui/material'
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
 import type { Plan, Route } from './api/types'
 import type { Focus } from './map/TripMap'
+import type { HeatView } from './heat/layer'
 import { useHeatWeather } from './heat/useHeatWeather'
+import { pointAt } from './map/geometry'
+import TimeBar from './timebar/TimeBar'
+import { truckMile } from './timebar/trip'
 import TripForm from './form/TripForm'
 import FailedNote from './plan/FailedNote'
 import { fieldErrors } from './plan/messages'
@@ -22,16 +26,31 @@ export default function App() {
   // The recommended route is selected for each new plan, until the user picks another.
   const [choice, setChoice] = useState<{ plan: Plan; id: Route['id'] } | null>(null)
   const selected = plan ? (choice?.plan === plan ? choice.id : plan.recommendation.route_id) : null
-  const select = (id: Route['id']) => plan && setChoice({ plan, id })
+  const select = useCallback((id: Route['id']) => { if (plan) setChoice({ plan, id }) }, [plan])
   const [focus, setFocus] = useState<Focus | null>(null)
-  const { heat } = useHeatWeather(plan)
-  const focusOn = (mile: number) => setFocus(f => ({ mile, seq: (f?.seq ?? 0) + 1 }))
+  const focusOn = useCallback((mile: number) => setFocus(f => ({ mile, seq: (f?.seq ?? 0) + 1 })), [])
+  const { heat, retry: retryHeat } = useHeatWeather(plan)
+  // The slider's hour: back to departure for each new plan.
+  const [time, setTime] = useState<{ plan: Plan; hour: number } | null>(null)
+  const hour = plan && time?.plan === plan ? time.hour : 0
+  const setHour = useCallback((h: number) => { if (plan) setTime({ plan, hour: h }) }, [plan])
+  const [view, setView] = useState<HeatView>('risk')
+  const route = plan?.routes.find(r => r.id === selected)
+  const mile = route ? truckMile(route, hour) : null
+  const truck = useMemo(() => (route && mile !== null ? pointAt(route, mile) : null), [route, mile])
 
   return (
     <Box sx={{ position: 'fixed', inset: 0, bgcolor: 'background.default' }}>
       <Suspense fallback={null}>
-        <TripMap plan={plan} selected={selected} onSelect={select} focus={focus} heat={heat} hour={0} view="risk" padding={PANEL_PADDING} />
+        <TripMap plan={plan} selected={selected} onSelect={select} focus={focus} heat={heat} hour={hour} view={view} truck={truck} padding={PANEL_PADDING} />
       </Suspense>
+      {plan && route && (
+        <Box sx={{ position: 'absolute', zIndex: 2, bottom: 22, left: `calc(${PANEL_PADDING.left}px + (100% - ${PANEL_PADDING.left}px) / 2)`,
+          transform: 'translateX(-50%)', width: `min(720px, calc(100% - ${PANEL_PADDING.left + 48}px))` }}>
+          <TimeBar route={route} departure={plan.trip.departure} loadLb={plan.trip.load_lb} hour={hour} onHour={setHour}
+            view={view} onView={setView} heat={heat} onRetryHeat={retryHeat} />
+        </Box>
+      )}
       <Panel>
         <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 3.25 }}>
           <Stack direction="row" spacing={1.1} sx={{ alignItems: 'center' }}>

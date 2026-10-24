@@ -37,6 +37,7 @@ interface Props {
   heat: HeatState
   hour: number // hours after departure shown by the heatmap
   view: HeatView
+  truck: [number, number] | null // where the truck is at that hour, on the selected route
   padding: PaddingOptions // the part of the map the panel covers
 }
 
@@ -53,11 +54,12 @@ function webgl(): boolean {
 }
 
 /** The map. The plan never depends on it: without WebGL the panel still shows everything. */
-export default function TripMap({ plan, selected, onSelect, focus, heat, hour, view, padding }: Props) {
+export default function TripMap({ plan, selected, onSelect, focus, heat, hour, view, truck, padding }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const map = useRef<MapLibre | null>(null)
   const markers = useRef<Marker[]>([])
   const heatRef = useRef<HeatLayer | null>(null)
+  const truckRef = useRef<Marker | null>(null)
   const [supported] = useState(webgl)
   const [ready, setReady] = useState(false) // our layers are in (the style is read)
   // The basemap's own files (tiles, fonts) can take long on a slow connection: say so, never a silent blank.
@@ -138,7 +140,8 @@ export default function TripMap({ plan, selected, onSelect, focus, heat, hour, v
     ;(m.getSource('routes') as GeoJSONSource).setData(plan ? routeFeatures(plan) : EMPTY)
     // The panel's part of the map is the map's own padding; fitBounds adds only a margin around the routes.
     m.setPadding(padding)
-    if (plan) m.fitBounds(new LngLatBounds(...bounds(plan)), { padding: { top: 70, bottom: 70, left: 60, right: 130 }, duration: 1200 })
+    // bottom: room for the slider card, so no route sits behind it
+    if (plan) m.fitBounds(new LngLatBounds(...bounds(plan)), { padding: { top: 70, bottom: 210, left: 60, right: 130 }, duration: 1200 })
     else m.easeTo({ ...US, duration: 1000 })
   }, [ready, plan, padding])
 
@@ -157,6 +160,18 @@ export default function TripMap({ plan, selected, onSelect, focus, heat, hour, v
   }, [ready, grid, weather, loadLb])
   useEffect(() => { heatRef.current?.setHour(hour) }, [hour, grid])
   useEffect(() => { heatRef.current?.setView(view) }, [view, grid])
+
+  // The truck dot moves with the slider; it is hidden before a plan and after arrival.
+  useEffect(() => {
+    const m = map.current
+    if (!ready || !m) return
+    if (!truck) { truckRef.current?.remove(); truckRef.current = null; return }
+    if (!truckRef.current) {
+      const el = document.createElement('div')
+      el.className = 'tw-truck'
+      truckRef.current = new Marker({ element: el }).setLngLat(truck).addTo(m)
+    } else truckRef.current.setLngLat(truck)
+  }, [ready, truck])
 
   // The selected route: in colour on top, its checkpoints and rest stops shown; the others grey.
   useEffect(() => {
