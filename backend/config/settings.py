@@ -94,6 +94,23 @@ ROUTING_TIMEOUT = (5, 10)   # seconds to connect, seconds to answer; a stalled s
 ROUTING_USER_AGENT = 'weather-aware-truck-routing (take-home project)'
 ROUTE_CACHE_SECONDS = 24 * 60 * 60
 
+# Weather: Open-Meteo (free, no key). It allows 600 locations a minute per address;
+# a trip asks for at most this many, half of that (see weather.py).
+OPEN_METEO_URL = os.environ.get('OPEN_METEO_URL', 'https://api.open-meteo.com/v1/forecast')
+WEATHER_MAX_LOCATIONS = 300
+WEATHER_BATCH = 200          # locations per request
+WEATHER_TIMEOUT = (5, 15)
+WEATHER_CACHE_SECONDS = 30 * 60
+
+# Cache: routes and forecasts, in memory. A trip can hold hundreds of forecast cells, far
+# over the default limit of 300 entries.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'OPTIONS': {'MAX_ENTRIES': 50_000},
+    },
+}
+
 # The truck. The load entered is cargo; routers need the whole truck, so a typical
 # empty tractor and 53 ft trailer is added. 105 km/h is a 65 mph speed governor.
 TRUCK_EMPTY_LB = 35_000

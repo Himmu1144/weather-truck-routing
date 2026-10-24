@@ -1,0 +1,95 @@
+"""Weather with Open-Meteo faked: nothing here calls the internet."""
+
+from unittest.mock import MagicMock, patch
+
+import requests
+from django.core.cache import cache
+from django.test import SimpleTestCase, override_settings
+
+from trips import weather
+from trips.weather import Reading, WeatherUnavailable, readings
+
+T0 = 1_792_922_400       # a whole hour, 2026-10-25 10:00 UTC
+H = 3600
+
+
+def hourly(wind, gust, rain, showers, snow):
+    return {'hourly': {'time': [T0 + k * H for k in range(len(wind))], 'wind_speed_10m': wind,
+                       'wind_gusts_10m': gust, 'rain': rain, 'showers': showers, 'snowfall': snow}}
+
+
+def answer(*locations, status=200):
+    fake = MagicMock(status_code=status)
+    fake.json.return_value = list(locations)
+    return fake
+
+
+class WeatherTests(SimpleTestCase):
+    def setUp(self):
+        cache.clear()
+        patcher = patch.object(weather.requests, 'get')
+        self.get = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_asks_for_the_units_and_hours_the_rules_use(self):
+        self.get.return_value = answer(hourly([10, 12], [15, 18], [0, 0], [0, 0], [0, 0]))
+        readings([((-87.63, 41.88), T0 + 1800)])
+        params = self.get.call_args.kwargs['params']
+        self.assertEqual((params['wind_speed_unit'], params['precipitation_unit']), ('mph', 'inch'))
+        self.assertEqual((params['start_hour'], params['end_hour']), ('2026-10-25T10:00', '2026-10-25T11:00'))
+
+    def test_reading_at_a_moment(self):
+        # 10:00 and 11:00; the truck is there at 10:15
+        self.get.return_value = answer(hourly([20, 40], [30, 50], [0.0, 0.30], [0.0, 0.05], [0.0, 0.1]))
+        reading, = readings([((-87.63, 41.88), T0 + 900)]).readings
+        self.assertEqual(reading.wind_mph, 25)     # a quarter of the way from 20 to 40
+        self.assertEqual(reading.gust_mph, 35)
+        self.assertAlmostEqual(reading.rain_in_hr, 0.35)   # the 10:00-11:00 total, rain plus showers
+        self.assertEqual(reading.snow_in_hr, 0.1)
+
+    def test_nearby_points_share_one_lookup(self):
+        self.get.return_value = answer(hourly([10], [10], [0], [0], [0]))
+        result = readings([((-87.63, 41.88), T0), ((-87.61, 41.89), T0)])   # about a mile apart
+        self.assertEqual(self.get.call_args.kwargs['params']['latitude'], '41.90')
+        self.assertEqual(result.readings, [Reading(10, 10, 0, 0)] * 2)
+        self.assertEqual(result.grid_miles, 7)
+
+    @override_settings(WEATHER_BATCH=2)
+    def test_many_cells_go_in_batches(self):
+        self.get.side_effect = lambda url, params, timeout: answer(
+            *[hourly([5], [5], [0], [0], [0])] * len(params['latitude'].split(',')))
+        readings([((-100 + k, 40), T0) for k in range(5)])
+        self.assertEqual(self.get.call_count, 3)
+
+    @override_settings(WEATHER_MAX_LOCATIONS=3)
+    def test_a_trip_over_the_limit_reads_from_a_coarser_grid(self):
+        self.get.side_effect = lambda url, params, timeout: answer(
+            *[hourly([5], [5], [0], [0], [0])] * len(params['latitude'].split(',')))
+        # three pairs of points: each pair spans two 0.1 degree cells but one 0.15 degree cell
+        lons = [-99.96, -99.84, -99.66, -99.54, -99.36, -99.24]
+        result = readings([((lon, 40), T0) for lon in lons])
+        self.assertEqual(len(self.get.call_args.kwargs['params']['latitude'].split(',')), 3)
+        self.assertEqual(result.grid_miles, 10)
+        self.assertEqual(len(result.readings), 6)
+
+    def test_repeat_lookups_come_from_the_cache(self):
+        # a long trip's worth of cells, more than the cache's default 300 entries
+        self.get.side_effect = lambda url, params, timeout: answer(
+            *[hourly([5], [5], [0], [0], [0])] * len(params['latitude'].split(',')))
+        points = [((-120 + 0.1 * k, 40), T0) for k in range(290)] + [((-120 + 0.1 * k, 41), T0) for k in range(200)]
+        with self.settings(WEATHER_MAX_LOCATIONS=1000):
+            readings(points)
+            calls = self.get.call_count
+            readings(points)
+        self.assertEqual(self.get.call_count, calls)
+
+    def test_a_busy_service_is_reported_as_busy(self):
+        self.get.return_value = answer(status=429)
+        with self.assertRaises(WeatherUnavailable) as raised:
+            readings([((-87.63, 41.88), T0)])
+        self.assertTrue(raised.exception.busy)
+        self.get.return_value, self.get.side_effect = None, requests.ConnectionError()
+        cache.clear()
+        with self.assertRaises(WeatherUnavailable) as raised:
+            readings([((-87.63, 41.88), T0)])
+        self.assertFalse(raised.exception.busy)
